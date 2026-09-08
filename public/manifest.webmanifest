@@ -1,0 +1,52 @@
+{
+  "id": "/",
+  "name": "حقائق العلوم",
+  "short_name": "حقائق",
+  "description": "منصة حقائق العلوم التعليمية الذكية المتكاملة: ملف الإنجاز الرقمي، حل المسائل بالذكاء الاصطناعي، رادار ربط المدارس، وإدارة الفصول والطلاب.",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay"],
+  "background_color": "#050a18",
+  "theme_color": "#070e22",
+  "orientation": "any",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "ملف الإنجاز الرقمي",
+      "short_name": "الإنجازات",
+      "description": "عرض وتوثيق إنجازات الطلاب والشهادات المعتمدة",
+      "url": "/?tab=achievements",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "حلال المسائل الذكي",
+      "short_name": "حلال المسائل",
+      "description": "حل المسائل والمعادلات بالذكاء الاصطناعي وOCR",
+      "url": "/?tab=solver",
+      "icons": [{ "src": "/pwa-192x192.png", "sizes": "192x192" }]
+    }
+  ]
+}
