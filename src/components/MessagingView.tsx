@@ -137,7 +137,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
   const [activeTab, setActiveTab] = useState<'direct' | 'circulars' | 'announcements' | 'tickets' | 'groups'>('direct');
 
   // School ID for multi-tenant isolation
-  const activeSchoolId = currentSchool?.id || currentUser?.schoolId || 'al-namouthajya';
+  const activeSchoolId = currentSchool?.id || currentUser?.schoolId || '';
   const effectiveUserName = currentUser?.fullName || initialStudentProfile?.name || 'مستخدم المنصة';
   const effectiveUserId = currentUser?.id || 'usr-default';
 

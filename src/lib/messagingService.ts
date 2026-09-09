@@ -2032,23 +2032,6 @@ export async function lookupInvitationCode(code: string): Promise<InvitationLook
     }
   }
 
-  // Fallback demo/mock lookup if offline or match demo codes
-  if (normalized.startsWith('HTAF') || normalized.startsWith('SCH') || normalized.startsWith('ALN') || normalized.length >= 6) {
-    return {
-      isValid: true,
-      invitation: {
-        invitation_code: normalized,
-        school_name: 'مدرسة الأندلس المتوسطة النموذجية',
-        school_id: 'al-namouthajya',
-        role: 'student',
-        grade: 'الصف الثالث المتوسط'
-      },
-      schoolId: 'al-namouthajya',
-      schoolName: 'مدرسة الأندلس المتوسطة النموذجية',
-      role: 'student'
-    };
-  }
-
   return {
     isValid: false,
     error: 'رمز الدعوة غير صحيح أو منتهي الصلاحية.'
@@ -2062,7 +2045,7 @@ export async function redeemInvitationAndLinkUser(
 ): Promise<{ success: boolean; message: string }> {
   try {
     const code = invitationCode.trim().toUpperCase();
-    const targetSchoolId = lookupResult?.schoolId || lookupResult?.invitation?.school_id || 'al-namouthajya';
+    const targetSchoolId = lookupResult?.schoolId || lookupResult?.invitation?.school_id || '';
     const targetRole = lookupResult?.role || lookupResult?.invitation?.role || 'student';
 
     if (isSupabaseConfigured && user?.id) {

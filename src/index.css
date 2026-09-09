@@ -196,12 +196,26 @@
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* Prevent unwanted horizontal swipe/scroll on mobile PWA */
-html, body {
-  overflow-x: hidden;
-  max-width: 100vw;
-  -webkit-tap-highlight-color: transparent;
-  overscroll-behavior-y: none;
+/* Enable smooth, fluid vertical scrolling across all devices, browsers, and iframes */
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  min-height: 100%;
 }
+
+body {
+  margin: 0;
+  min-height: 100%;
+  -webkit-overflow-scrolling: touch;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
 
 

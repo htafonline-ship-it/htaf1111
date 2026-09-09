@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CurriculumBook, BookPageAnalysisResult } from '../types';
+import { getAuthenticSaudiBookPage } from '../data/saudiCurriculumPagesEngine';
 import {
   BookOpen,
   ChevronLeft,
@@ -22,8 +23,12 @@ import {
   Award,
   Layers,
   ArrowRight,
-  Bookmark
+  Bookmark,
+  List,
+  Search,
+  Download
 } from 'lucide-react';
+import { BookDownloadModal } from './BookDownloadModal';
 
 interface InteractiveBookPageReaderProps {
   book: CurriculumBook;
@@ -48,12 +53,14 @@ export const InteractiveBookPageReader: React.FC<InteractiveBookPageReaderProps>
 
   const [loading, setLoading] = useState<boolean>(false);
   const [analysisData, setAnalysisData] = useState<BookPageAnalysisResult | null>(null);
+  const [showIndex, setShowIndex] = useState<boolean>(false);
+  const [showDownloadModal, setShowDownloadModal] = useState<boolean>(false);
 
   // Practice Quiz State
   const [userQuizAnswers, setUserQuizAnswers] = useState<Record<string, number>>({});
   const [submittedQuiz, setSubmittedQuiz] = useState<boolean>(false);
 
-  // Fetch Page Analysis from Backend
+  // Fetch Page Analysis from Backend or Local Knowledge Engine
   const fetchPageAnalysis = async (pageNum: number) => {
     setLoading(true);
     setSubmittedQuiz(false);
@@ -64,6 +71,11 @@ export const InteractiveBookPageReader: React.FC<InteractiveBookPageReaderProps>
       (c) => c.pageStart && c.pageEnd && pageNum >= c.pageStart && pageNum <= c.pageEnd
     );
 
+    // 1. Immediately provide authentic, high-quality Saudi curriculum content
+    const authenticData = getAuthenticSaudiBookPage(book.title, book.subject, book.grade, pageNum, chapter?.title);
+    setAnalysisData(authenticData);
+
+    // 2. Fetch AI enrichment if available
     try {
       const res = await fetch('/api/analyze-page', {
         method: 'POST',
@@ -78,11 +90,17 @@ export const InteractiveBookPageReader: React.FC<InteractiveBookPageReaderProps>
       });
 
       const data = await res.json();
-      if (data.success && data.data) {
-        setAnalysisData(data.data);
+      if (data.success && data.data && data.data.pageHeading) {
+        // Prevent old repetitive fallback from overriding authentic data
+        const isOldRepetitive =
+          data.data.pageSummary?.includes('فهم المبدأ العلمي الأساسي') &&
+          !book.subject.includes('علوم');
+        if (!isOldRepetitive) {
+          setAnalysisData(data.data);
+        }
       }
     } catch (err) {
-      console.error('Error analyzing page:', err);
+      console.warn('Curriculum engine fallback engaged:', err);
     } finally {
       setLoading(false);
     }
@@ -153,6 +171,24 @@ export const InteractiveBookPageReader: React.FC<InteractiveBookPageReaderProps>
 
           {/* PAGE NAVIGATOR CONTROLLER */}
           <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end bg-slate-800/80 p-1.5 rounded-2xl border border-slate-700">
+            <button
+              onClick={() => setShowIndex(true)}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 transition shadow-sm ml-1"
+              title="استعراض فهرس ومحتويات صفحات الكتاب"
+            >
+              <List className="w-4 h-4" />
+              <span className="hidden sm:inline">فهرس الصفحات</span>
+            </button>
+
+            <button
+              onClick={() => setShowDownloadModal(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-slate-700 hover:bg-slate-600 text-emerald-300 hover:text-white font-bold text-xs flex items-center gap-1.5 transition ml-1"
+              title="تحميل طبعة الكتاب الوزارية المعتمدة بصيغة PDF"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">تحميل الكتاب (PDF)</span>
+            </button>
+
             <button
               onClick={handlePrevPage}
               disabled={currentPage <= 1}
@@ -653,6 +689,138 @@ export const InteractiveBookPageReader: React.FC<InteractiveBookPageReaderProps>
           </div>
         </div>
 
+        {/* TABLE OF CONTENTS MODAL */}
+        {showIndex && (
+          <div className="fixed inset-0 z-[60] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
+            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[85vh]">
+              <div className="bg-slate-900 text-white p-4 sm:p-5 flex items-center justify-between border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg">
+                    📑
+                  </div>
+                  <div>
+                    <h3 className="font-black text-base text-white">فهرس وحدات وموضوعات الكتاب</h3>
+                    <p className="text-xs text-slate-400 font-bold">{book.title} • {book.editionYear || 'طبعة 1448هـ'}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowIndex(false)}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 sm:p-6 overflow-y-auto space-y-6">
+                {/* Quick Introductory Pages */}
+                <div>
+                  <h4 className="text-xs font-black text-slate-500 mb-2.5 flex items-center gap-1.5">
+                    <Bookmark className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>الصفحات التمهيدية الأولى (دليل المنهج والاعتماد)</span>
+                  </h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { num: 1, title: 'بيانات النشر والاعتماد' },
+                      { num: 2, title: 'مقدمة الكتاب والمنهج' },
+                      { num: 3, title: 'فهرس الوحدات والفصول' },
+                      { num: 4, title: 'دليل الرموز وبوابة عين' }
+                    ].map((p) => (
+                      <button
+                        key={p.num}
+                        onClick={() => {
+                          setCurrentPage(p.num);
+                          setPageInput(String(p.num));
+                          setShowIndex(false);
+                        }}
+                        className={`p-2.5 rounded-2xl border text-right transition flex flex-col justify-between h-20 ${
+                          currentPage === p.num
+                            ? 'bg-emerald-50 border-emerald-500 text-emerald-950 font-black'
+                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-800'
+                        }`}
+                      >
+                        <span className="text-[11px] font-black text-emerald-700">صفحة {p.num}</span>
+                        <span className="text-xs font-bold leading-tight line-clamp-2">{p.title}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Chapters & Units */}
+                <div className="space-y-4">
+                  <h4 className="text-xs font-black text-slate-500 flex items-center gap-1.5">
+                    <BookOpen className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>فصول ووحدات المنهج السعودي المعتمد</span>
+                  </h4>
+
+                  {book.chapters.map((ch, idx) => (
+                    <div
+                      key={ch.id || idx}
+                      className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/60 pb-2.5">
+                        <div>
+                          <span className="text-[10px] font-black bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
+                            صفحات {ch.pageStart} إلى {ch.pageEnd}
+                          </span>
+                          <h5 className="font-black text-slate-900 text-sm mt-1">{ch.title}</h5>
+                        </div>
+                        <button
+                          onClick={() => {
+                            const targetP = ch.pageStart || 1;
+                            setCurrentPage(targetP);
+                            setPageInput(String(targetP));
+                            setShowIndex(false);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-3.5 py-1.5 rounded-xl transition self-start sm:self-auto"
+                        >
+                          انتقال لبداية الوحدة (ص {ch.pageStart})
+                        </button>
+                      </div>
+
+                      {ch.topics && ch.topics.length > 0 && (
+                        <div className="space-y-1.5">
+                          <span className="text-[11px] font-bold text-slate-500">الموضوعات والدروس المشمولة:</span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                            {ch.topics.map((t, tIdx) => (
+                              <div
+                                key={tIdx}
+                                className="text-xs text-slate-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl font-medium flex items-center gap-1.5"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                <span className="truncate">{t}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+                <span className="text-xs text-slate-500 font-bold">
+                  إجمالي صفحات الكتاب: {book.totalPages || 180} صفحة
+                </span>
+                <button
+                  onClick={() => setShowIndex(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 font-extrabold text-xs text-slate-800 transition"
+                >
+                  إغلاق الفهرس
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Book Download Modal */}
+        {showDownloadModal && (
+          <BookDownloadModal
+            book={book}
+            isOpen={showDownloadModal}
+            onClose={() => setShowDownloadModal(false)}
+          />
+        )}
       </div>
     </div>
   );

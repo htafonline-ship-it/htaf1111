@@ -59,24 +59,9 @@ export const TeacherQuizzesView: React.FC<TeacherQuizzesViewProps> = ({
   const [isPublished, setIsPublished] = useState<boolean>(true);
 
   // Questions Builder
-  const [questions, setQuestions] = useState<TeacherQuizQuestion[]>([
-    {
-      id: 'q-1',
-      questionText: 'ما هي وحدة قياس القوة في النظام الدولي؟',
-      options: ['الجول', 'النيوتن', 'الباسكال', 'الواط'],
-      correctAnswerIndex: 1,
-      points: 2
-    },
-    {
-      id: 'q-2',
-      questionText: 'أي من العناصر التالية يعتبر من أشباه الفلزات؟',
-      options: ['السيليكون', 'الحديد', 'الأكسجين', 'الصوديوم'],
-      correctAnswerIndex: 0,
-      points: 2
-    }
-  ]);
+  const [questions, setQuestions] = useState<TeacherQuizQuestion[]>([]);
 
-  const schoolId = currentSchool?.id || 'al-namouthajya';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
   const teacherId = currentUser?.id || 'teacher-default';
   const teacherName = currentUser?.fullName || 'المعلم المعتمد';
 
@@ -87,45 +72,11 @@ export const TeacherQuizzesView: React.FC<TeacherQuizzesViewProps> = ({
       if (data && data.length > 0) {
         setQuizzes(data);
       } else {
-        // Fallback default quizzes
-        setQuizzes([
-          {
-            id: 'quiz-1',
-            schoolId,
-            teacherId,
-            teacherName,
-            gradeName: 'الصف الثالث المتوسط',
-            classroomName: '3/أ',
-            subjectName: 'العلوم',
-            title: 'اختبار قصير: الجدول الدوري والتفاعلات الكيميائية',
-            description: 'اختبار تشخيصي لقياس المفاهيم الأساسية في الوحدة الأولى.',
-            examDate: new Date(Date.now() + 172800000).toISOString().split('T')[0],
-            examTime: '08:30',
-            durationMinutes: 20,
-            totalPoints: 10,
-            questions: [
-              {
-                id: 'q-1',
-                questionText: 'ما هي شحنة البروتون؟',
-                options: ['موجبة', 'سالبة', 'متعادلة', 'لا توجد شحنة'],
-                correctAnswerIndex: 0,
-                points: 5
-              },
-              {
-                id: 'q-2',
-                questionText: 'أين تتمركز معظم كتلة الذرة؟',
-                options: ['في الإلكترونات', 'في النواة', 'في الفراغ المحيط', 'في المدار الخارجي'],
-                correctAnswerIndex: 1,
-                points: 5
-              }
-            ],
-            isPublished: true,
-            createdAt: new Date().toISOString()
-          }
-        ]);
+        setQuizzes([]);
       }
     } catch (err) {
       console.warn('Error loading quizzes:', err);
+      setQuizzes([]);
     } finally {
       setIsLoading(false);
     }

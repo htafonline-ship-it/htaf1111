@@ -70,10 +70,10 @@ export const AppreciationLettersManager: React.FC<AppreciationLettersManagerProp
   const isSuperAdmin = userRole === 'super_admin' || userRole === 'platform_admin';
 
   // Real School Binding (Derived strictly from account / school_id)
-  const schoolId = currentSchool?.id || currentUser?.schoolId || 'al-namouthajya';
-  const schoolName = currentSchool?.name || currentUser?.schoolName || 'مدرسة النموذجية الأهلية';
-  const educationDirectorate = currentSchool?.educationDirectorate || 'إدارة التعليم بمحافظة الخرج';
-  const principalName = currentSchool?.principalName || 'أ. منيرة عبد الرحمن الدوسري';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
+  const schoolName = currentSchool?.name || currentUser?.schoolName || 'المدرسة';
+  const educationDirectorate = currentSchool?.educationDirectorate || 'إدارة التعليم';
+  const principalName = currentSchool?.principalName || 'مدير المدرسة';
 
   // Letters Storage State
   const [letters, setLetters] = useState<AppreciationLetter[]>(() => {
@@ -81,7 +81,11 @@ export const AppreciationLettersManager: React.FC<AppreciationLettersManagerProp
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) {
+          // Remove old mock/demo certificates
+          const cleanLetters = parsed.filter((l: any) => !l.id?.startsWith('cert-htaf-00'));
+          return cleanLetters;
+        }
       } catch (e) {
         console.warn('Failed to parse cached letters', e);
       }
@@ -103,24 +107,14 @@ export const AppreciationLettersManager: React.FC<AppreciationLettersManagerProp
           if (fetched && fetched.length > 0) {
             setAssignedStudents(fetched);
           } else {
-            // Sample fallback matching school
-            setAssignedStudents([
-              { id: 'st-01', full_name: 'سارة عبد الله العاصمي', grade_name: 'الصف الثالث المتوسط', classroom_name: '3/أ', email: 'sara@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-              { id: 'st-02', full_name: 'ريم بنت عبد العزيز الشمري', grade_name: 'الصف الأول المتوسط', classroom_name: '1/ج', email: 'reem@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-              { id: 'st-03', full_name: 'عبدالله بن فهد القحطاني', grade_name: 'الصف الثالث المتوسط', classroom_name: '3/أ', email: 'abdullah@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-              { id: 'st-04', full_name: 'عمر خالد المنصور', grade_name: 'الصف الثاني المتوسط', classroom_name: '2/ب', email: 'omar@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' }
-            ]);
+            setAssignedStudents([]);
           }
         } else {
-          setAssignedStudents([
-            { id: 'st-01', full_name: 'سارة عبد الله العاصمي', grade_name: 'الصف الثالث المتوسط', classroom_name: '3/أ', email: 'sara@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-            { id: 'st-02', full_name: 'ريم بنت عبد العزيز الشمري', grade_name: 'الصف الأول المتوسط', classroom_name: '1/ج', email: 'reem@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-            { id: 'st-03', full_name: 'عبدالله بن فهد القحطاني', grade_name: 'الصف الثالث المتوسط', classroom_name: '3/أ', email: 'abdullah@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' },
-            { id: 'st-04', full_name: 'عمر خالد المنصور', grade_name: 'الصف الثاني المتوسط', classroom_name: '2/ب', email: 'omar@demo.edu.sa', school_id: schoolId, status: 'active', created_at: '' }
-          ]);
+          setAssignedStudents([]);
         }
       } catch (err) {
         console.warn('Could not load students for certificates', err);
+        setAssignedStudents([]);
       } finally {
         setIsLoadingStudents(false);
       }

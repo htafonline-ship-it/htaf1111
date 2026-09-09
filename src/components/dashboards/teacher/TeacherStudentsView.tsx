@@ -84,7 +84,7 @@ export const TeacherStudentsView: React.FC<TeacherStudentsViewProps> = ({
   const [isAdminOnly, setIsAdminOnly] = useState<boolean>(false);
   const [isSubmittingNote, setIsSubmittingNote] = useState<boolean>(false);
 
-  const schoolId = currentSchool?.id || 'al-namouthajya';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
   const teacherId = currentUser?.id || 'teacher-default';
   const teacherName = currentUser?.fullName || 'المعلم المعتمد';
 

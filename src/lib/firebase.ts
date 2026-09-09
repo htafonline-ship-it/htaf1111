@@ -61,7 +61,7 @@ export function mapFirebaseUserToAuthUser(fbUser: FirebaseUser): AuthUser {
     fullName: fbUser.displayName || email.split('@')[0] || 'مستخدم Google المعتمد',
     email: email,
     role: role,
-    schoolId: 'al-namouthajya',
+    schoolId: '',
     accountStatus: 'active',
     avatarUrl: fbUser.photoURL || undefined,
     loginMethod: 'google',
@@ -103,12 +103,12 @@ export function createDirectGoogleAuthUser(email: string, displayName?: string):
   const user: AuthUser = {
     id: `google_${cleanEmail.replace(/[^a-zA-Z0-9]/g, '_')}`,
     username: cleanEmail.split('@')[0],
-    fullName: displayName || (isSuperAdmin ? 'مدير عام المنصة (هتاف العاصمي)' : cleanEmail.split('@')[0]),
+    fullName: displayName || (isSuperAdmin ? 'مدير عام المنصة' : cleanEmail.split('@')[0]),
     email: cleanEmail,
     role: role,
-    schoolId: 'al-namouthajya',
+    schoolId: '',
     accountStatus: 'active',
-    avatarUrl: isSuperAdmin ? 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop' : undefined,
+    avatarUrl: undefined,
     loginMethod: 'google',
     badge: isSuperAdmin ? 'مدير المنصة الرئيسي (Super Admin)' : 'حساب Google معتمد'
   };

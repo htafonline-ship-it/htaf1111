@@ -323,126 +323,7 @@ export async function signInWithUsernameOrEmail(
     };
   }
 
-  // 2. Check for Preset Quick Demo Accounts
-  if (cleanLower === 'student.demo1' || cleanLower.startsWith('student.demo')) {
-    return {
-      authUser: {
-        id: 'usr-demo-student',
-        username: 'student.demo1',
-        fullName: 'طالب تجريبي (الصف الثالث المتوسط)',
-        email: 'student.demo1@htaf.online',
-        role: 'student',
-        schoolId: 'al-namouthajya',
-        classId: 'class-3-1',
-        gradeId: 'grade-3-m',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب تجريبي (طالب)'
-      },
-      rawUser: { id: 'usr-demo-student', email: 'student.demo1@htaf.online' }
-    };
-  }
-
-  if (cleanLower === 'teacher.demo1' || cleanLower.startsWith('teacher.demo')) {
-    return {
-      authUser: {
-        id: 'usr-demo-teacher',
-        username: 'teacher.demo1',
-        fullName: 'أ. عبد العزيز الشمري (معلم العلوم)',
-        email: 'teacher.demo1@htaf.online',
-        role: 'teacher',
-        schoolId: 'al-namouthajya',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب تجريبي (معلم)'
-      },
-      rawUser: { id: 'usr-demo-teacher', email: 'teacher.demo1@htaf.online' }
-    };
-  }
-
-  if (cleanLower === 'teacher.noura' || cleanLower === 'teacher.sara' || cleanLower.includes('noura') || cleanLower.includes('teacher.female')) {
-    return {
-      authUser: {
-        id: 'usr-demo-teacher-noura',
-        username: cleanLower.includes('noura') ? 'teacher.noura' : 'teacher.sara',
-        fullName: 'أ. نورة بنت فهد القحطاني (معلمة الأحياء والعلوم)',
-        email: 'teacher.noura@htaf.online',
-        role: 'teacher',
-        schoolId: 'al-namouthajya',
-        schoolName: 'مدرسة النموذجية الأهلية',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب معلمة معتمد (معلمة العلوم)'
-      },
-      rawUser: { id: 'usr-demo-teacher-noura', email: 'teacher.noura@htaf.online' }
-    };
-  }
-
-
-  if (cleanLower === 'parent.demo1' || cleanLower.startsWith('parent.demo')) {
-    return {
-      authUser: {
-        id: 'usr-demo-parent',
-        username: 'parent.demo1',
-        fullName: 'أبو فهد (ولي أمر تجريبي)',
-        email: 'parent.demo1@htaf.online',
-        role: 'parent',
-        schoolId: 'al-namouthajya',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب تجريبي (ولي أمر)'
-      },
-      rawUser: { id: 'usr-demo-parent', email: 'parent.demo1@htaf.online' }
-    };
-  }
-
-  if (cleanLower === 'counselor.demo1' || cleanLower.startsWith('counselor.demo')) {
-    return {
-      authUser: {
-        id: 'usr-demo-counselor',
-        username: 'counselor.demo1',
-        fullName: 'أ. خالد التميمي (الموجه الطلابي)',
-        email: 'counselor.demo1@htaf.online',
-        role: 'counselor',
-        schoolId: 'al-namouthajya',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب تجريبي (موجه طلابي)'
-      },
-      rawUser: { id: 'usr-demo-counselor', email: 'counselor.demo1@htaf.online' }
-    };
-  }
-
-  if (cleanLower === 'principal.demo1' || cleanLower.startsWith('principal.demo') || cleanLower.startsWith('admin.demo')) {
-    return {
-      authUser: {
-        id: 'usr-demo-principal',
-        username: 'principal.demo1',
-        fullName: 'أ. محمد العتيبي (مدير مدرسة النموذجية)',
-        email: 'principal.demo1@htaf.online',
-        role: 'school_admin',
-        schoolId: 'al-namouthajya',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        loginMethod: 'credentials',
-        badge: 'حساب تجريبي (مدير مدرسة)'
-      },
-      rawUser: { id: 'usr-demo-principal', email: 'principal.demo1@htaf.online' }
-    };
-  }
-
-  // 3. Check locally registered users in localStorage (offline/resilient registration)
+  // 2. Check locally registered users in localStorage (offline/resilient registration)
   try {
     const localAccountsStr = localStorage.getItem('htaf_registered_users');
     if (localAccountsStr) {
@@ -577,9 +458,9 @@ export async function signInWithUsernameOrEmail(
       fullName: userDisplayName,
       email: clean.includes('@') ? clean : `${clean}@htaf.online`,
       role: derivedRole,
-      schoolId: 'al-namouthajya',
-      classId: derivedRole === 'student' ? 'class-3-1' : undefined,
-      gradeId: derivedRole === 'student' ? 'grade-3-m' : undefined,
+      schoolId: undefined,
+      classId: undefined,
+      gradeId: undefined,
       accountStatus: 'active',
       isDemoAccount: true,
       demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
@@ -632,7 +513,7 @@ export async function registerNewUser(payload: RegisterNewUserPayload): Promise<
             full_name: cleanFullName,
             username: cleanUsername,
             role: payload.role,
-            school_id: payload.schoolId || 'al-namouthajya',
+            school_id: payload.schoolId || '',
             phone: payload.phoneNumber
           }
         }
@@ -649,7 +530,7 @@ export async function registerNewUser(payload: RegisterNewUserPayload): Promise<
         username: cleanUsername,
         email: cleanEmail,
         role: payload.role,
-        school_id: payload.schoolId || 'al-namouthajya',
+        school_id: payload.schoolId || '',
         grade_id: payload.gradeId,
         class_id: payload.classId,
         account_status: 'active',
@@ -724,63 +605,7 @@ export async function registerNewUser(payload: RegisterNewUserPayload): Promise<
 
 export async function fetchSupabaseDemoAccounts(schoolId?: string): Promise<DbProfile[]> {
   if (!isSupabaseConfigured) {
-    // Return sample offline demo accounts
-    return [
-      {
-        id: 'usr-demo-student',
-        full_name: 'طالب تجريبي (الصف الثالث المتوسط)',
-        username: 'student.demo1',
-        email: 'student.demo1@htaf.online',
-        role: 'student',
-        school_id: 'al-namouthajya',
-        class_id: 'class-3-1',
-        grade_id: 'grade-3-m',
-        account_status: 'active',
-        is_demo_account: true,
-        demo_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-teacher',
-        full_name: 'أ. عبد العزيز الشمري (معلم العلوم)',
-        username: 'teacher.demo1',
-        email: 'teacher.demo1@htaf.online',
-        role: 'teacher',
-        school_id: 'al-namouthajya',
-        account_status: 'active',
-        is_demo_account: true,
-        demo_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-parent',
-        full_name: 'أبو فهد (ولي أمر تجريبي)',
-        username: 'parent.demo1',
-        email: 'parent.demo1@htaf.online',
-        role: 'parent',
-        school_id: 'al-namouthajya',
-        account_status: 'active',
-        is_demo_account: true,
-        demo_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-counselor',
-        full_name: 'أ. خالد التميمي (الموجه الطلابي)',
-        username: 'counselor.demo1',
-        email: 'counselor.demo1@htaf.online',
-        role: 'counselor',
-        school_id: 'al-namouthajya',
-        account_status: 'active',
-        is_demo_account: true,
-        demo_expires_at: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        created_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString()
-      }
-    ];
+    return [];
   }
 
   try {
@@ -1006,63 +831,7 @@ export async function fetchSchoolUsersForInvite(schoolId: string): Promise<Array
 
 export async function fetchSchoolProfiles(schoolId: string): Promise<UserProfile[]> {
   if (!isSupabaseConfigured || !schoolId) {
-    // Return sample profiles for UI testing
-    return [
-      {
-        id: 'usr-demo-student',
-        fullName: 'طالب تجريبي (الصف الثالث المتوسط)',
-        username: 'student.demo1',
-        email: 'student.demo1@htaf.online',
-        role: 'student',
-        schoolId,
-        classId: 'class-3-1',
-        gradeId: 'grade-3-m',
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-teacher',
-        fullName: 'أ. عبد العزيز الشمري (معلم العلوم)',
-        username: 'teacher.demo1',
-        email: 'teacher.demo1@htaf.online',
-        role: 'teacher',
-        schoolId,
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-parent',
-        fullName: 'أبو فهد (ولي أمر تجريبي)',
-        username: 'parent.demo1',
-        email: 'parent.demo1@htaf.online',
-        role: 'parent',
-        schoolId,
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      },
-      {
-        id: 'usr-demo-counselor',
-        fullName: 'أ. خالد التميمي (الموجه الطلابي)',
-        username: 'counselor.demo1',
-        email: 'counselor.demo1@htaf.online',
-        role: 'counselor',
-        schoolId,
-        accountStatus: 'active',
-        isDemoAccount: true,
-        demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
-        createdAt: new Date().toISOString(),
-        lastLoginAt: new Date().toISOString()
-      }
-    ];
+    return [];
   }
 
   try {

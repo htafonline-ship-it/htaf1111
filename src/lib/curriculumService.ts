@@ -404,3 +404,8 @@ export function filterTeacherAssignedBooks(
     return subjectMatch && gradeMatch;
   });
 }
+
+// -------------------------------------------------------------
+// 6. BOOK PDF DOWNLOAD & EXPORT SERVICE
+// -------------------------------------------------------------
+export { downloadCurriculumBookPdf } from './curriculumDownloadService';

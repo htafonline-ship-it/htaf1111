@@ -8,6 +8,7 @@ import {
   UserProfile
 } from '../types';
 import { CurriculumBookCover } from './CurriculumBookCover';
+import { BookDownloadModal } from './BookDownloadModal';
 import {
   X,
   BookOpen,
@@ -30,7 +31,8 @@ import {
   Layers,
   Lightbulb,
   ExternalLink,
-  ShieldCheck
+  ShieldCheck,
+  Download
 } from 'lucide-react';
 
 interface CurriculumBookDetailModalProps {
@@ -48,6 +50,8 @@ interface CurriculumBookDetailModalProps {
   onOpenSmartTeacherLesson: (lessonTitle: string, mode: 'explain' | 'quiz' | 'summary') => void;
   onOpenSolverForLesson: (lessonTitle: string) => void;
   onExportPdf: () => void;
+  onOpenDownloadModal?: () => void;
+  onOpenQuiz?: (book: CurriculumBook) => void;
   currentUser?: UserProfile | null;
   currentRole?: UserRole;
   // Teacher actions
@@ -68,12 +72,15 @@ export const CurriculumBookDetailModal: React.FC<CurriculumBookDetailModalProps>
   onExportPdf,
   currentUser,
   currentRole = 'student',
+  onOpenDownloadModal,
+  onOpenQuiz,
   onCreateHomeworkForLesson,
   onCreateQuizForLesson,
   onCreateStudyRoomForLesson
 }) => {
   if (!isOpen) return null;
 
+  const [showInternalDownload, setShowInternalDownload] = useState(false);
   const [expandedChapters, setExpandedChapters] = useState<Record<string, boolean>>(() => {
     const init: Record<string, boolean> = {};
     book.chapters.forEach((ch, idx) => {
@@ -192,6 +199,20 @@ export const CurriculumBookDetailModal: React.FC<CurriculumBookDetailModalProps>
 
               {/* Primary Action Buttons */}
               <div className="flex flex-wrap items-center gap-2.5 pt-1">
+                {onOpenQuiz && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenQuiz(book);
+                    }}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition"
+                    title="إجراء اختبار سريع مكون من 5 أسئلة اختيار من متعدد"
+                  >
+                    <Target className="w-4 h-4 text-emerald-200" />
+                    <span>🎯 اختبار سريع (5 أسئلة)</span>
+                  </button>
+                )}
+
                 <button
                   onClick={() => onOpenReader(1, 'reader')}
                   className="bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-lg shadow-emerald-600/20 flex items-center gap-2 transition"
@@ -215,8 +236,45 @@ export const CurriculumBookDetailModal: React.FC<CurriculumBookDetailModalProps>
                   <Printer className="w-4 h-4 text-slate-500" />
                   <span>تقرير المقرر (PDF)</span>
                 </button>
+
+                <button
+                  onClick={() => (onOpenDownloadModal ? onOpenDownloadModal() : setShowInternalDownload(true))}
+                  className="bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-800 hover:to-emerald-800 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md flex items-center gap-2 transition"
+                  title="تحميل طبعة الكتاب الوزارية الرسمية بصيغة PDF"
+                >
+                  <Download className="w-4 h-4 text-emerald-300" />
+                  <span>📥 خانة تحميل الكتاب (PDF)</span>
+                </button>
               </div>
             </div>
+          </div>
+
+          {/* Quick Book Download Banner */}
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 border border-emerald-200 p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 text-right">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-2xl bg-emerald-600 text-white flex items-center justify-center font-bold shadow-md shrink-0">
+                <Download className="w-6 h-6" />
+              </div>
+              <div>
+                <h4 className="font-black text-sm sm:text-base text-slate-900 flex items-center gap-2">
+                  <span>خانة تحميل المقرر المعتمد (PDF) والأنشطة</span>
+                  <span className="bg-emerald-200 text-emerald-800 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    طبعة 1448هـ - 2027م
+                  </span>
+                </h4>
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  احصل على النسخة الكاملة المعتمدة من وزارة التعليم، أو حمّل كراسة الأنشطة ودليل الوحدات، أو احفظ المقرر للقراءة بدون إنترنت.
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => (onOpenDownloadModal ? onOpenDownloadModal() : setShowInternalDownload(true))}
+              className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs px-5 py-3 rounded-xl shadow-md flex items-center justify-center gap-2 transition shrink-0"
+            >
+              <Download className="w-4 h-4" />
+              <span>تحميل الكتاب الآن</span>
+            </button>
           </div>
 
           {/* Chapters and Interactive Lessons Breakdown */}
@@ -594,6 +652,14 @@ export const CurriculumBookDetailModal: React.FC<CurriculumBookDetailModalProps>
             </div>
           </div>
         </div>
+      )}
+      {/* Book Download Center Modal */}
+      {showInternalDownload && (
+        <BookDownloadModal
+          book={book}
+          isOpen={showInternalDownload}
+          onClose={() => setShowInternalDownload(false)}
+        />
       )}
     </div>
   );

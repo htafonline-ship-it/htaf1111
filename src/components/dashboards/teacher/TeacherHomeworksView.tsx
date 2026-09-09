@@ -60,7 +60,7 @@ export const TeacherHomeworksView: React.FC<TeacherHomeworksViewProps> = ({
   const [totalPoints, setTotalPoints] = useState<number>(5);
   const [description, setDescription] = useState<string>('');
 
-  const schoolId = currentSchool?.id || 'al-namouthajya';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
   const teacherId = currentUser?.id || 'teacher-default';
   const teacherName = currentUser?.fullName || 'المعلم المعتمد';
 

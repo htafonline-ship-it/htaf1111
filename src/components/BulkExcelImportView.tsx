@@ -51,74 +51,68 @@ export const BulkExcelImportView: React.FC<BulkExcelImportViewProps> = ({
     if (!e.target.files || e.target.files.length === 0) return;
     const file = e.target.files[0];
 
-    // Simulate smart parsing from Excel / CSV
     setIsProcessing(true);
-    setTimeout(() => {
+    const reader = new FileReader();
+
+    reader.onload = (event) => {
       setIsProcessing(false);
-      // Fresh mock data representing parsed excel file
-      const parsedNewData: BulkStudentRow[] = [
-        {
-          id: `parse-1-${Date.now()}`,
-          fullName: 'فهد بن سلطان المطيري',
-          nationalId: '1091122334',
-          grade: 'الصف الثالث المتوسط',
-          section: '3/أ',
-          parentPhone: '0511112233',
-          status: 'valid'
-        },
-        {
-          id: `parse-2-${Date.now()}`,
-          fullName: 'تركي بن نايف العتيبي',
-          nationalId: '1082233445',
-          grade: 'الصف الثالث المتوسط',
-          section: '3/أ',
-          parentPhone: '0522223344',
-          status: 'valid'
-        },
-        {
-          id: `parse-3-${Date.now()}`,
-          fullName: 'ماجد بن عبدالله الغامدي',
-          nationalId: '1073344556',
-          grade: 'الصف الثالث المتوسط',
-          section: '3/ب',
-          parentPhone: '0533334455',
-          status: 'valid'
-        },
-        {
-          id: `parse-4-${Date.now()}`,
-          fullName: 'خالد بن طلال الزهراني',
-          nationalId: '1064455667',
-          grade: 'الصف الثاني المتوسط',
-          section: '2/أ',
-          parentPhone: '0544445566',
-          status: 'valid'
-        },
-        {
-          id: `parse-5-${Date.now()}`,
-          fullName: 'زياد بن محمد القرني',
-          nationalId: '1064455667', // duplicate test
-          grade: 'الصف الثاني المتوسط',
-          section: '2/أ',
-          parentPhone: '0555556677',
-          status: 'duplicate_id'
-        }
-      ];
-      setRows(parsedNewData);
+      const text = event.target?.result as string;
+      if (!text) return;
+
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length <= 1) {
+        setRows([]);
+        return;
+      }
+
+      const seenIds = new Set<string>();
+      const parsedData: BulkStudentRow[] = [];
+
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((c) => c.replace(/^"|"$/g, '').trim());
+        if (cols.length < 2) continue;
+
+        const fullName = cols[0] || `طالب ${i}`;
+        const nationalId = cols[1] || `100000000${i}`;
+        const grade = cols[2] || 'الصف الدراسي';
+        const section = cols[3] || '1';
+        const parentPhone = cols[4] || '';
+
+        const isDuplicate = seenIds.has(nationalId);
+        seenIds.add(nationalId);
+
+        parsedData.push({
+          id: `parse-${i}-${Date.now()}`,
+          fullName,
+          nationalId,
+          grade,
+          section,
+          parentPhone,
+          status: isDuplicate ? 'duplicate_id' : (!nationalId ? 'missing_info' : 'valid')
+        });
+      }
+
+      setRows(parsedData);
       setImportCompleted(false);
-    }, 1200);
+    };
+
+    reader.onerror = () => {
+      setIsProcessing(false);
+      setRows([]);
+    };
+
+    reader.readAsText(file, 'UTF-8');
   };
 
   const handleDownloadTemplate = () => {
-    // Generates a sample CSV template for download
+    // Generates a clean CSV template for download
     const csvContent =
-      'data:text/csv;charset=utf-8,الاسم الكامل,رقم السجل المدني / الهوية,الصف الدراسي,الشعبة / الفصل,رقم تواصل ولي الأمر\n' +
-      'عبدالله بن فهد القحطاني,1098827361,الصف الثالث المتوسط,3/أ,0501234567\n' +
-      'سعد بن عبدالعزيز الشهري,1087723910,الصف الثالث المتوسط,3/أ,0559876543\n';
+      'data:text/csv;charset=utf-8,الاسم الكامل,رقم السجل المدني / الهوية,الصف الدراسي,الشعبة / الفصل,رقم تواصل ولي الأمر\n';
 
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `نموذج_رفع_الطلاب_${currentSchool.slug}.csv`);
+    link.setAttribute('download', `نموذج_رفع_الطلاب_${currentSchool?.slug || 'school'}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

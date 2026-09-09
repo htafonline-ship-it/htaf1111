@@ -15,195 +15,11 @@ import {
   BulkStudentRow
 } from '../types';
 
-export const INITIAL_REGISTRATION_CODES: SchoolRegistrationCode[] = [
-  {
-    id: 'code-101',
-    code: 'SCH-2026-RIYADH-01',
-    schoolNameAssigned: 'مدرسة النموذجية الذكية بفرع الرياض',
-    createdDate: '2026-01-01',
-    status: 'مستخدم',
-    usedBySchoolId: 'school-1',
-    usedAtDate: '2026-01-05',
-    cityRegion: 'الرياض'
-  },
-  {
-    id: 'code-102',
-    code: 'SCH-2026-JEDDAH-02',
-    schoolNameAssigned: 'معد ومدارس الأجيال العالمية والأهلية',
-    createdDate: '2026-01-10',
-    status: 'مستخدم',
-    usedBySchoolId: 'school-2',
-    usedAtDate: '2026-01-12',
-    cityRegion: 'جدة'
-  },
-  {
-    id: 'code-103',
-    code: 'SCH-2026-DAMMAM-03',
-    schoolNameAssigned: 'مدارس المجد النموذجية الأهلية',
-    createdDate: '2026-01-15',
-    status: 'مستخدم',
-    usedBySchoolId: 'school-3',
-    usedAtDate: '2026-01-18',
-    cityRegion: 'الدمام'
-  },
-  {
-    id: 'code-104',
-    code: 'SCH-2026-VIP-99',
-    schoolNameAssigned: 'مدرسة جديدة (قيد التجهيز)',
-    createdDate: '2026-02-01',
-    status: 'نشط',
-    cityRegion: 'الرياض - تعليم شرق'
-  },
-  {
-    id: 'code-105',
-    code: 'SCH-2026-MAKKAH-88',
-    schoolNameAssigned: 'مدرسة مكة المتقدمة',
-    createdDate: '2026-02-05',
-    status: 'نشط',
-    cityRegion: 'مكة المكرمة'
-  }
-];
+export const INITIAL_REGISTRATION_CODES: SchoolRegistrationCode[] = [];
 
-export const INITIAL_BULK_STUDENTS_SAMPLE: BulkStudentRow[] = [
-  {
-    id: 'row-1',
-    fullName: 'عبدالله بن فهد القحطاني',
-    nationalId: '1098827361',
-    grade: 'الصف الثالث المتوسط',
-    section: '3/أ',
-    parentPhone: '0501234567',
-    status: 'valid'
-  },
-  {
-    id: 'row-2',
-    fullName: 'سعد بن عبدالعزيز الشهري',
-    nationalId: '1087723910',
-    grade: 'الصف الثالث المتوسط',
-    section: '3/أ',
-    parentPhone: '0559876543',
-    status: 'valid'
-  },
-  {
-    id: 'row-3',
-    fullName: 'عمر بن خالد الدوسري',
-    nationalId: '1098827361', // Duplicate ID for test demo
-    grade: 'الصف الثالث المتوسط',
-    section: '3/ب',
-    parentPhone: '0543332211',
-    status: 'duplicate_id'
-  },
-  {
-    id: 'row-4',
-    fullName: 'محمد بن راشد العتيبي',
-    nationalId: '1076612984',
-    grade: 'الصف الأول الثانوي',
-    section: '1/ج',
-    parentPhone: '0567788990',
-    status: 'valid'
-  },
-  {
-    id: 'row-5',
-    fullName: 'يوسف بن سلمان الحربي',
-    nationalId: '',
-    grade: 'الصف الثاني المتوسط',
-    section: '2/أ',
-    parentPhone: '0500001122',
-    status: 'missing_info'
-  }
-];
+export const INITIAL_BULK_STUDENTS_SAMPLE: BulkStudentRow[] = [];
 
-export const INITIAL_SCHOOLS: SchoolTenant[] = [
-  {
-    id: 'school-1',
-    name: 'مدرسة النموذجية الذكية بفرع الرياض',
-    nameEn: 'Al-Namouthajya Smart School',
-    slug: 'al-namouthajya',
-    logoText: 'هـ',
-    badge: 'مدرسة متميزة VIP',
-    primaryColor: '#059669', // Emerald
-    accentColor: '#10b981',
-    motto: 'نصنع قادة المستقبل برؤية تعليمية ذكية',
-    location: 'الرياض - حي حطين',
-    registrationCodeUsed: 'SCH-2026-RIYADH-01',
-    isApproved: true,
-    principalName: 'أ. د. عبدالمحسن العتيبي',
-    principalEmail: 'principal@alnamouthajya.edu.sa',
-    totalStudentsCount: 420,
-    totalTeachersCount: 35,
-    circulars: [
-      {
-        id: 'circ-101',
-        title: 'الخطة الزمنية لاختبارات منتصف الفصل الدراسي الثاني',
-        number: 'ت-2026/04',
-        date: '2026-02-10',
-        priority: 'عاجل',
-        category: 'اختبارات',
-        content: 'المكرمون أولياء الأمور والطلاب، نفيدكم ببدء اختبارات منتصف الفصل الدراسي الثاني اعتباراً من الأحد القادم. نأمل الالتزام بالحضور المبكر والاستعانة بخطط المراجعة في المنصة.',
-        targetAudience: 'الجميع',
-        attachedDocName: 'جدول_الاختبارات_النصفية.pdf'
-      },
-      {
-        id: 'circ-102',
-        title: 'تفعيل المساعد الذكي "هتاف العاصمي" لحل المسائل',
-        number: 'ت-2026/02',
-        date: '2026-02-01',
-        priority: 'هام',
-        category: 'إداري',
-        content: 'تم تفعيل تقنية الذكاء الاصطناعي لحل المسائل وربطها بالكتب الوزارية المعتمدة. نوصي بفتح حسابات المتابعة لأولياء الأمور.',
-        targetAudience: 'الجميع'
-      }
-    ]
-  },
-  {
-    id: 'school-2',
-    name: 'معد ومدارس الأجيال العالمية والأهلية',
-    nameEn: 'Al-Ajeal Schools',
-    slug: 'al-ajeal',
-    logoText: 'جـ',
-    badge: 'اعتماد دولي',
-    primaryColor: '#2563eb', // Blue
-    accentColor: '#3b82f6',
-    motto: 'الأصالة والتطوير العلمي',
-    location: 'جدة - حي الشاطئ',
-    registrationCodeUsed: 'SCH-2026-JEDDAH-02',
-    isApproved: true,
-    principalName: 'د. سارة الماجد',
-    principalEmail: 'principal@alajeal.edu.sa',
-    totalStudentsCount: 310,
-    totalTeachersCount: 28,
-    circulars: [
-      {
-        id: 'circ-201',
-        title: 'ورشة عمل التوجيه والإرشاد الطلابي للتفوق الأكاديمي',
-        number: 'ت-ج/88',
-        date: '2026-02-05',
-        priority: 'عادي',
-        category: 'إرشاد طلابي',
-        content: 'يدعو قسم الإرشاد الطلابي أولياء أمور الطلاب لحضور الجلسة التفاعلية الذكية حول الاستعداد النفسي للاختبارات النهائية.',
-        targetAudience: 'أولياء الأمور'
-      }
-    ]
-  },
-  {
-    id: 'school-3',
-    name: 'مدارس المجد النموذجية الأهلية',
-    nameEn: 'Al-Majd Schools',
-    slug: 'al-majd',
-    logoText: 'مـ',
-    badge: 'رائدة التكنولوجيا',
-    primaryColor: '#7c3aed', // Purple
-    accentColor: '#8b5cf6',
-    motto: 'علمٌ يضيء ورؤية ترتقي',
-    location: 'الدمام - حي الشاطئ الشرقي',
-    registrationCodeUsed: 'SCH-2026-DAMMAM-03',
-    isApproved: true,
-    principalName: 'أ. خالد التميمي',
-    principalEmail: 'principal@almajd.edu.sa',
-    totalStudentsCount: 280,
-    totalTeachersCount: 22,
-    circulars: []
-  }
-];
+export const INITIAL_SCHOOLS: SchoolTenant[] = [];
 
 export const INITIAL_CURRICULUM_SYNC_STATUS: CurriculumSyncStatus = {
   lastSyncTime: 'اليوم، 08:30 ص',
@@ -275,7 +91,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الفصل 1: المقارنة والتصنيف والأعداد حتى 5',
         pageStart: 10,
         pageEnd: 45,
-        topics: ['التصنيف وفق خاصية واحدة', 'الأعداد 1، 2، 3', 'قراءة الأعداد وكتباتها حتى 5']
+        topics: ['التصنيف وفق خاصية واحدة', 'الأعداد 1، 2، 3', 'قراءة الأعداد وكتابتها حتى 5']
       },
       {
         id: 'p1-m-ch2',
@@ -488,7 +304,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الوحدة 1: تنوع الحياة والتصنيف',
         pageStart: 12,
         pageEnd: 55,
-        topics: ['مملكة النباتات ومملكة الحيوانات', 'تركيب الخلية النباتية والحيوانية', 'الأجهزة الحييوية في الكائنات الحية']
+        topics: ['مملكة النباتات ومملكة الحيوانات', 'تركيب الخلية النباتية والحيوانية', 'الأجهزة الحيوية في الكائنات الحية']
       }
     ]
   },
@@ -731,6 +547,217 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
     ]
   },
   {
+    id: 'book-tajweed-m1-tahfeez-1447',
+    title: 'التجويد - الأول المتوسط (مدارس تحفيظ القرآن الكريم)',
+    book_name: 'التجويد - الأول المتوسط (مدارس تحفيظ القرآن الكريم)',
+    subject: 'التجويد',
+    subject_name: 'التجويد (تحفيظ القرآن الكريم)',
+    grade: 'الصف الأول المتوسط',
+    stage: 'middle',
+    education_stage: 'middle',
+    term: 1,
+    semester: 1,
+    academic_year: '1447هـ - 2025م',
+    is_active: true,
+    book_pdf_url: 'https://ien.edu.sa/preview/tajweed-m1-tahfeez-1447.pdf',
+    source_url: 'https://ien.edu.sa/Home/Book/tajweed-m1-tahfeez-1447',
+    coverIcon: '📖',
+    totalPages: 156,
+    editionYear: 'طبعة 1447هـ - 2025م (مدارس تحفيظ القرآن الكريم)',
+    portalUrl: 'https://ien.edu.sa/Home/Book/tajweed-m1-tahfeez-1447',
+    isLatestSync: true,
+    chapters: [
+      {
+        id: 'tajweed-m1-ch0',
+        title: 'المدخل والمقدمة وفهرس المقرر',
+        pageStart: 1,
+        pageEnd: 7,
+        topics: [
+          'ص 1-2: الغلاف والاعتماد الوزاري ورقم الإيداع 15240/1446هـ',
+          'ص 3-5: البسملة ومقدمة الكتاب وأهداف تدريس التجويد بمدارس التحفيظ',
+          'ص 6-7: الفهرس العام لموضوعات الجزء الأول'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch1',
+        title: 'الدرس الأول: علم التجويد',
+        pageStart: 8,
+        pageEnd: 12,
+        topics: [
+          'أهداف الدرس وتعريف التجويد لغة واصطلاحاً',
+          'نشأة علم التجويد واستمداده من قراءة النبي ﷺ',
+          'حكم التجويد (فرض كفاية وفرض عين) وفائدته',
+          'الشاهد من الجزرية: والأخذ بالتجويد حتم لازم',
+          'حل أنشطة ص 9، ص 10 وأسئلة التقويم ص 12'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch2',
+        title: 'الدرس الثاني: اللحن في قراءة القرآن الكريم',
+        pageStart: 13,
+        pageEnd: 18,
+        topics: [
+          'معنى اللحن: الخطأ والميل عن الصواب',
+          'اللحن الجلي: تعريفه وأمثلته (ضم تاء أنعمت، إبدال الحركات)',
+          'اللحن الخفي: تعريفه وأمثلته (نقص الغنن والمدود)',
+          'جدول المقارنة وحل أنشطة وتطبيقات سورة الحجرات',
+          'الشاهد من كلام الداني وحل أسئلة التقويم ص 17-18'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch3',
+        title: 'الدرس الثالث: الاستعاذة والبسملة والأوجه بين السورتين',
+        pageStart: 19,
+        pageEnd: 26,
+        topics: [
+          'معنى الاستعاذة وأحكامها وسنيتها عند البدء',
+          'معنى البسملة وأحكامها في أوائل وأوساط السور وسورة التوبة',
+          'أوجه البسملة الثلاثة الجائزة بين السورتين والوجه الممتنع',
+          'أوجه ما بين الأنفال والتوبة: الوقف، السكت، الوصل بلا بسملة',
+          'الشواهد وحل الأنشطة وأسئلة التقويم ص 25'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch4',
+        title: 'الدرس الرابع: مراتب القراءة',
+        pageStart: 27,
+        pageEnd: 31,
+        topics: [
+          'مرتبة التحقيق: القراءة بتأن واطمئنان مع توفية الحروف',
+          'مرتبة الحدر: السرعة في القراءة دون إخلال بالأحكام',
+          'مرتبة التدوير: المرتبة المتوسطة بين التحقيق والحدر',
+          'الشاهد من الخاقانية والتحفة وحل أسئلة التقويم ص 30'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch5',
+        title: 'الدرس الخامس: أحكام النون الساكنة والتنوين',
+        pageStart: 32,
+        pageEnd: 36,
+        topics: [
+          'تعريف النون الساكنة والتنوين والفرق الجوهري بينهما',
+          'الأحكام الأربعة: الإظهار، الإدغام، الإقلاب، الإخفاء',
+          'تطبيقات واستخراج الأحكام من سورة يوسف',
+          'الشاهد من الجزرية والتحفة وحل أسئلة التقويم ص 36'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch6',
+        title: 'الدرس السادس: الإظهار الحلقي',
+        pageStart: 37,
+        pageEnd: 43,
+        topics: [
+          'تعريف الإظهار الحلقي لغة واصطلاحاً',
+          'حروف الحلق الستة: الهمزة، الهاء، العين، الحاء، الغين، الخاء',
+          'أمثلة النون الساكنة والتنوين مع حروف الإظهار',
+          'الشاهد من تحفة الأطفال وعلامة الضبط بالمصحف (رأس خاء)',
+          'حل أنشطة ص 40، ص 41، والتقويم ص 42'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch7',
+        title: 'الدرس السابع: الإدغام',
+        pageStart: 44,
+        pageEnd: 49,
+        topics: [
+          'تعريف الإدغام لغة واصطلاحاً وحروفه الستة (يرملون)',
+          'الإدغام بغنة (ينمو) والإدغام بغير غنة (رل)',
+          'شرط الإدغام من كلمتين وحكم الإظهار المطلق (دنيا، بنيان، قنوان، صنوان)',
+          'الشاهد من تحفة الأطفال وتطبيق سورة يوسف',
+          'حل أنشطة ص 46، ص 47، والتقويم ص 48'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch8',
+        title: 'الدرس الثامن: الإقلاب',
+        pageStart: 50,
+        pageEnd: 56,
+        topics: [
+          'تعريف الإقلاب لغة واصطلاحاً وحرفه الوحيد (الباء)',
+          'كيفية أداء الإقلاب: قلب النون ميماً مع الغنة والإخفاء',
+          'علامة الإقلاب بالمصحف (ميم صغيرة قائمة بدل السكون)',
+          'الشاهد من تحفة الأطفال: والثالث الإقلاب عند الباء',
+          'حل أنشطة ص 52، ص 53، والتقويم ص 55'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch9',
+        title: 'الدرس التاسع: الإخفاء الحقيقي',
+        pageStart: 57,
+        pageEnd: 62,
+        topics: [
+          'تعريف الإخفاء الحقيقي لغة واصطلاحاً وحروفه الـ 15',
+          'بيت التحفة: صف ذا ثنا كم جاد شخص قد سما...',
+          'كيفية نطق الإخفاء بحالة متوسطة بين الإظهار والإدغام بلا تشديد مع الغنة',
+          'تطبيقات سورة يوسف وحل أنشطة ص 60، ص 61، والتقويم ص 61-62'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch10',
+        title: 'الدرس العاشر: أحكام الميم الساكنة',
+        pageStart: 63,
+        pageEnd: 70,
+        topics: [
+          'تعريف الميم الساكنة (الخالية من الحركة)',
+          'الإخفاء الشفوي عند حرف الباء',
+          'الإدغام الشفوي (الصغير) عند حرف الميم',
+          'الإظهار الشفوي عند باقي الحروف الـ 26 والتحذير من إخفائها عند الواو والفاء',
+          'الشواهد وحل الأنشطة والتقويم ص 69'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch11',
+        title: 'الدرس الحادي عشر: حكم الميم والنون المشددتين',
+        pageStart: 71,
+        pageEnd: 76,
+        topics: [
+          'تعريف الميم والنون المشددتين وحكمهما (إظهار الغنة حركتين)',
+          'مراتب الغنة الثلاث (المشدد والمدغم كامل التشديد، المدغم بغنة، المخفى)',
+          'الشاهد من تحفة الأطفال: وغن ميماً ثم نوناً شددا',
+          'حل أنشطة ص 73، ص 74، وأسئلة التقويم ص 75'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch12',
+        title: 'الجزء الثاني: اللامات السواكن ولام (أل) ولام الفعل',
+        pageStart: 77,
+        pageEnd: 96,
+        topics: [
+          'ص 77-79: مقدمة الجزء الثاني وفهرس دروس اللامات والمدود',
+          'ص 80-84: اللامات السواكن وتعريفها وأقسامها وحكمها بين الإظهار والإدغام',
+          'ص 85-90: لام (أل) - اللام القمرية (ابغ حجك وخف عقيمه) واللام الشمسية (طب ثم صل...)',
+          'ص 91-96: لام الفعل وأحكام إظهارها وإدغامها في اللام والراء'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch13',
+        title: 'الجزء الثاني: المد وتعريفه وأقسامه والمد الطبيعي',
+        pageStart: 97,
+        pageEnd: 114,
+        topics: [
+          'ص 97-101: تعريف المد وحروفه الثلاثة وشروطها ومقاديره (القصر، التوسط، الإشباع)',
+          'ص 102-108: أقسام المد (المد الأصلي الطبيعي والمد الفرعي بسبب الهمز أو السكون)',
+          'ص 109-114: المد الطبيعي (الأصلي) وحالات ثبوته وصلاً ووقفاً ومقداره حركتان'
+        ]
+      },
+      {
+        id: 'tajweed-m1-ch14',
+        title: 'الجزء الثاني: المدود الفرعية (المتصل، المنفصل، البدل، العارض، اللازم)',
+        pageStart: 115,
+        pageEnd: 156,
+        topics: [
+          'ص 115-121: المد المتصل (حكمه الوجوب ومقداره 4-5 حركات وشاهد الجمزوري)',
+          'ص 122-131: المد المنفصل (حكمه الجواز وصوره وأحكام قصر المنفصل)',
+          'ص 132-135: مد البدل (تقدم الهمز على حرف المد وحكمه ومقداره حركتان)',
+          'ص 136-142: المد العارض للسكون (أوجهه الثلاثة: قصر وتوسط وإشباع)',
+          'ص 143-147: المد اللازم (سكون أصلي ثابت، حكمه اللزوم، ومقداره 6 حركات)',
+          'ص 148-155: أقسام المد اللازم الأربعة (كلمي وحرفي مثقل ومخفف) وشاهد التحفة',
+          'ص 156: المخطط الشجري الشامل لجميع أقسام المد الأصلي والفرعي'
+        ]
+      }
+    ]
+  },
+  {
     id: 'book-arabic-m1-1448',
     title: 'لغتي الخالدة - الأول المتوسط (طبعة 1448هـ)',
     book_name: 'لغتي الخالدة - الأول المتوسط',
@@ -867,11 +894,62 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
     portalUrl: 'https://ien.edu.sa/Home/Book/islamic-m2-1448',
     chapters: [
       {
+        id: 'm2-i-ch0',
+        title: 'المدخل ودليل المنهج والرموز التعليمية وبوابة عين',
+        pageStart: 1,
+        pageEnd: 9,
+        topics: [
+          'بيانات الاعتماد الوزاري وطبعة 1448هـ',
+          'مقدمة الكتاب ورؤية السعودية 2030',
+          'الفهرس العام وتوزيع الوحدات والدروس',
+          'دليل الرموز والأيقونات المعتمدة ومسار التقويم'
+        ]
+      },
+      {
         id: 'm2-i-ch1',
-        title: 'التفسير والحديث والتوقيد والفقه',
+        title: 'الوحدة الأولى: التوحيد والعقيدة الإسلامية',
         pageStart: 10,
-        pageEnd: 70,
-        topics: ['تفسير سور الفرقان والنور', 'حديث الإيمان والحياء', 'أحكام المعاملات المالية والمبيعات في الفقه']
+        pageEnd: 45,
+        topics: [
+          'وجوب التوحيد وفضل تحقيقه وأدلته من القرآن والسنة',
+          'الشرك الأكبر: تعريفه وأنواعه ومحبطات الأعمال',
+          'الشرك الأصغر والرياء والحلف بغير الله تعالى',
+          'حكم التمائم والرقى والتطير ووسائل حماية التوحيد'
+        ]
+      },
+      {
+        id: 'm2-i-ch2',
+        title: 'الوحدة الثانية: التفسير وعلوم القرآن الكريم',
+        pageStart: 46,
+        pageEnd: 85,
+        topics: [
+          'تفسير سورة الفرقان (صفات عباد الرحمن وجزاؤهم)',
+          'تفسير سورة النور (آداب الاستئذان وحرمة البيوت)',
+          'تفسير سورة النور (حفظ الفروج وغض البصر وعفة المجتمع)'
+        ]
+      },
+      {
+        id: 'm2-i-ch3',
+        title: 'الوحدة الثالثة: الحديث الشريف والسيرة النبوية',
+        pageStart: 86,
+        pageEnd: 120,
+        topics: [
+          'حديث شعب الإيمان وفضل خلق الحياء',
+          'حديث الصدق والأمانة في التعامل والمعاملات',
+          'حديث الأخوة الإيمانية وحقوق المسلم على المسلم'
+        ]
+      },
+      {
+        id: 'm2-i-ch4',
+        title: 'الوحدة الرابعة: الفقه الإسلامي وأحكام المعاملات',
+        pageStart: 121,
+        pageEnd: 160,
+        topics: [
+          'كتاب البيوع: تعريفه وحكمه وشروط صحة البيع السبعة',
+          'البيوع المنهي عنها: بيع الغرر والنجش',
+          'أحكام الربا وصوره: ربا الفضل وربا النسيئة',
+          'الخيارات في البيع والعقود والمعاملات المعاصرة'
+        ]
       }
     ]
   },
@@ -1054,7 +1132,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الوحدة 1: التفكير ومعايير الحجة والمنطق',
         pageStart: 12,
         pageEnd: 55,
-        topics: ['مفهوم التفكير الناقد ومعاييره', 'التمييز بين الحقيقة والرأي والحجة المنطقية', 'المغالطات المنطقية وتفنيذها']
+        topics: ['مفهوم التفكير الناقد ومعاييره', 'التمييز بين الحقيقة والرأي والحجة المنطقية', 'المغالطات المنطقية وتفنيدها']
       }
     ]
   },
@@ -1335,7 +1413,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الوحدة 2: النمذجة التنبؤية وأخلاقيات AI',
         pageStart: 69,
         pageEnd: 125,
-        topics: ['التحيز في البيانات البيانات العادلة Fair Data', 'تقييم كفاءة النموذج Precision & Recall', 'الأمن السبراني ونماذج الذكاء التوليدي']
+        topics: ['التحيز في البيانات والبيانات العادلة Fair Data', 'تقييم كفاءة النموذج Precision & Recall', 'الأمن السيبراني ونماذج الذكاء التوليدي']
       }
     ]
   },
@@ -1365,7 +1443,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الفصل 1: الجهاز العصبي والغدد والمناعة البشرية',
         pageStart: 15,
         pageEnd: 70,
-        topics: ['تركيب السيال العصبي والخليلة العصبية', 'التشريح الوظيفي لجهاز الغدد الصماء', 'المناعة المتخصصة والأجسام المضادة']
+        topics: ['تركيب السيال العصبي والخلية العصبية', 'التشريح الوظيفي لجهاز الغدد الصماء', 'المناعة المتخصصة والأجسام المضادة']
       }
     ]
   },
@@ -1455,7 +1533,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
         title: 'الفصل 1: الدوال والمصفوفات والمصفوفة العكسية',
         pageStart: 10,
         pageEnd: 65,
-        topics: ['خصائص الأعداد الحقيقية والعلاقات والدوال', 'العمليات على المصفوفات والحددات', 'حل أنظمة المعادلات بالمصفوفات']
+        topics: ['خصائص الأعداد الحقيقية والعلاقات والدوال', 'العمليات على المصفوفات والمحددات', 'حل أنظمة المعادلات بالمصفوفات']
       }
     ]
   },
@@ -1573,7 +1651,7 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
     chapters: [
       {
         id: 's3-i-ch1',
-        title: 'التفسير التوافق والفرائض والقضايا الفقهية المعاصرة',
+        title: 'التفسير والمواريث والفرائض والقضايا الفقهية المعاصرة',
         pageStart: 10,
         pageEnd: 60,
         topics: ['تفسير آيات الأحكام والمواطنة', 'علم المواريث والفرائض وتطبيقاتها', 'القضايا الطبية والمالية المعاصرة']
@@ -1613,370 +1691,31 @@ export const CURRICULUM_BOOKS: CurriculumBook[] = [
 ];
 
 export const INITIAL_STUDENT_PROFILE: StudentProfile = {
-  id: 'std-2026-01',
-  name: 'طالب منصة هتاف العاصمي',
-  grade: 'الصف الثالث المتوسط (شعبة 3/أ)',
+  id: '',
+  name: '',
+  grade: '',
   stage: 'middle',
   avatar: '🧑‍🎓',
-  schoolSlug: 'al-namouthajya',
-  screenTimeDailyLimitMinutes: 90,
-  screenTimeUsedTodayMinutes: 42,
-  aiQuestionsCountToday: 8,
-  subjectsPerformance: [
-    {
-      subject: 'الرياضيات',
-      scorePercentage: 94,
-      gradeLetter: 'ممتاز A+',
-      masteryLevel: 'ممتاز',
-      homeworkCompleted: 12,
-      totalHomework: 12
-    },
-    {
-      subject: 'العلوم',
-      scorePercentage: 88,
-      gradeLetter: 'جيد جداً A',
-      masteryLevel: 'جيد جداً',
-      homeworkCompleted: 10,
-      totalHomework: 11
-    },
-    {
-      subject: 'الفيزياء',
-      scorePercentage: 82,
-      gradeLetter: 'جيد جداً B+',
-      masteryLevel: 'جيد جداً',
-      homeworkCompleted: 7,
-      totalHomework: 9
-    },
-    {
-      subject: 'اللغة العربية',
-      scorePercentage: 96,
-      gradeLetter: 'ممتاز A+',
-      masteryLevel: 'ممتاز',
-      homeworkCompleted: 14,
-      totalHomework: 14
-    }
-  ],
-  upcomingExams: [
-    {
-      id: 'ex-1',
-      subject: 'الرياضيات',
-      date: '2026-02-15',
-      topic: 'الفصل 6: تحليل المعادلات التربيعية وتطبيقاتها',
-      difficulty: 'متوسط إلى متقدم'
-    },
-    {
-      id: 'ex-2',
-      subject: 'العلوم',
-      date: '2026-02-18',
-      topic: 'التفاعلات الكيميائية والجدول الدوري',
-      difficulty: 'متوسط'
-    }
-  ],
-  aiRevisionPlan: {
-    title: 'خطة التفوق والاستعداد لاختبار الرياضيات والعلوم',
-    description: 'خطة مراجعة ذكية مصممة خصيصاً لسارة بناءً على تحليل نقاط القوة وتدريبات منصة «هتاف العاصمي».',
-    daysCount: 5,
-    tasks: [
-      { day: 1, title: 'مراجعة تحليل وحيدات الحد والمربعات الكاملة (كتاب الرياضيات - ص 52)', completed: true, subject: 'الرياضيات' },
-      { day: 2, title: 'حل 5 مسائل على القانون العام والمميز ب²-4أج واستخدام حلال المسائل الذكي', completed: true, subject: 'الرياضيات' },
-      { day: 3, title: 'مراجعة التركيب الذري والروابط الكيميائية (كتاب العلوم - ص 62)', completed: false, subject: 'العلوم' },
-      { day: 4, title: 'جلسة المعلم التفاعلي الذكي للتأكد من فهم تفاعلات الأكسدة والسرعة الكيميائية', completed: false, subject: 'العلوم' },
-      { day: 5, title: 'حل نموذج اختبار تجريبي شامل مع التقييم الفوري', completed: false, subject: 'الرياضيات' }
-    ]
-  }
+  schoolSlug: '',
+  screenTimeDailyLimitMinutes: 120,
+  screenTimeUsedTodayMinutes: 0,
+  aiQuestionsCountToday: 0,
+  subjectsPerformance: [],
+  upcomingExams: [],
+  aiRevisionPlan: undefined
 };
 
-export const INITIAL_HOMEWORKS: HomeworkAssignment[] = [
-  {
-    id: 'hw-101',
-    title: 'حل واجب تحليل المعادلات التربيعية',
-    subject: 'الرياضيات',
-    dueDate: '2026-02-12',
-    totalPoints: 10,
-    status: 'pending',
-    schoolSlug: 'al-namouthajya',
-    gradeLevel: 'الثالث المتوسط',
-    description: 'قم بحل المسائل رقم 3 و 7 و 12 في كتاب الطالب صفحة 64 مع توضيح خطوات الحل التفصيلية.',
-    textbookPage: 64
-  },
-  {
-    id: 'hw-102',
-    title: 'تقرير مصغر عن الروابط التساهمية والأيونية',
-    subject: 'العلوم',
-    dueDate: '2026-02-14',
-    totalPoints: 15,
-    status: 'submitted',
-    score: 14,
-    feedback: 'عمل ممتاز يا سارة، الرسوم التوضيحية كانت واضحة ومتقنة.',
-    schoolSlug: 'al-namouthajya',
-    gradeLevel: 'الثالث المتوسط',
-    description: 'كتابة ملخص من 200 كلمة يوضح الفرق بين الرابطة الأيونية والتساهمية مع إعطاء مثال لكل منهما من واقع الحياة.'
-  },
-  {
-    id: 'hw-103',
-    title: 'استخراج أسماء الفاعلين والمفعولين من نص النصيحة',
-    subject: 'اللغة العربية',
-    dueDate: '2026-02-10',
-    totalPoints: 10,
-    status: 'graded',
-    score: 10,
-    feedback: 'درجة كاملة، إجابات دقيقة واعراب صحيح.',
-    schoolSlug: 'al-namouthajya',
-    gradeLevel: 'الثالث المتوسط',
-    description: 'استخرج من النص في صفحة 30 ثلاثة أسماء فاعل وزنتها واذكر أفعالها الثلاثية.'
-  }
-];
+export const INITIAL_HOMEWORKS: HomeworkAssignment[] = [];
 
-export const INITIAL_QUIZZES: QuizItem[] = [
-  {
-    id: 'qz-201',
-    title: 'اختبار قصير: المعادلات الخطية ونظام المعادلتين',
-    subject: 'الرياضيات',
-    durationMinutes: 15,
-    status: 'available',
-    totalQuestions: 4,
-    questions: [
-      {
-        id: 'q1',
-        question: 'ما قيمة س في المعادلة: 2س + 5 = 15؟',
-        options: ['س = 3', 'س = 5', 'س = 10', 'س = 7'],
-        correctAnswer: 1,
-        explanation: 'بطرح 5 من الطرفين: 2س = 10، ثم بالقسمة على 2 نحصل على س = 5.'
-      },
-      {
-        id: 'q2',
-        question: 'المقدار المميز في القانون العام للمعادلات التربيعية يساوي:',
-        options: ['أ² + ب²', 'ب² - 4أج', '2أ / ب', 'ب / (2أ)'],
-        correctAnswer: 1,
-        explanation: 'المميز هو ب² - 4أج ويحدد عدد ونوع جذور المعادلة التربيعية.'
-      },
-      {
-        id: 'q3',
-        question: 'إذا كان المميز أقل من الصفر (سالب)، فإن المعادلة التربيعية:',
-        options: ['لها حلان حقيقيان', 'لها حل حقيقي واحد', 'ليس لها حلول حقيقية (حلول مركبة)', 'لها عدد لا نهائي من الحلول'],
-        correctAnswer: 2,
-        explanation: 'عندما يكون المميز سالباً، لا يوجد جذر تربيعي حقيقي له وبالتالي لا توجد حلول حقيقية.'
-      },
-      {
-        id: 'q4',
-        question: 'تحليل المقدار س² + 5س + 6 هو:',
-        options: ['(س + 1)(س + 6)', '(س + 2)(س + 3)', '(س - 2)(س - 3)', '(س + 5)(س + 1)'],
-        correctAnswer: 1,
-        explanation: 'نبحث عن عددين حاصل ضربهما 6 ومجموعهما 5، وهما 2 و 3.'
-      }
-    ]
-  },
-  {
-    id: 'qz-202',
-    title: 'اختبار قصير: الجدول الدوري والتوزيع الإلكتروني',
-    subject: 'العلوم',
-    durationMinutes: 10,
-    status: 'completed',
-    score: 100,
-    totalQuestions: 3,
-    questions: [
-      {
-        id: 'qs1',
-        question: 'شحنة النواة في الذرة تكون دائماً:',
-        options: ['سالبة', 'موجبة', 'متعادلة', 'متغيرة'],
-        correctAnswer: 1,
-        explanation: 'النواة تحتوي على البروتونات الموجبة والنيوترونات المتعادلة، فتكون شحنتها الكلية موجبة.'
-      }
-    ]
-  }
-];
+export const INITIAL_QUIZZES: QuizItem[] = [];
 
-export const INITIAL_REFERRALS: CounselingReferral[] = [
-  {
-    id: 'ref-301',
-    studentName: 'أحمد خالد الشمري',
-    grade: 'الصف الأول الثانوي (شعبة 1/ب)',
-    referrerName: 'أ. منصور العتيبي',
-    referrerRole: 'معلم',
-    date: '2026-02-08',
-    category: 'أكاديمي',
-    priority: 'متوسط',
-    status: 'قيد المتابعة',
-    reason: 'تراجع ملحوظ في درجات مادة الفيزياء وقسوة التشتت أثناء الحصص الأخيرة.',
-    confidentialNotes: [
-      {
-        id: 'cn-1',
-        author: 'الموجه الطلابي د. إبراهيم السعيد',
-        date: '2026-02-09',
-        note: 'تمت مقابلة الطالب ودياً، وتبين وجود صعوبة في مراجعة دروس الحركة المتسارعة. تم تحويله لخطة التمكين واستخدام المساعد الذكي "منصة هتاف العاصمي".'
-      }
-    ],
-    actionPlan: 'جلسة أسبوعية مع الموجه الطلابي + استدعاء ولي الأمر لتنسيق تنظيم وقت الاستيعاب.'
-  },
-  {
-    id: 'ref-302',
-    studentName: 'ريان فهد العبد الله',
-    grade: 'الصف الثاني المتوسط (شعبة 2/أ)',
-    referrerName: 'أم ريان (ولي أمر)',
-    referrerRole: 'ولي أمر',
-    date: '2026-02-04',
-    category: 'غياب وتأخر',
-    priority: 'عاجل',
-    status: 'جديد',
-    reason: 'طلب مساعدة من الموجه الطلابي لمعالجة القلق النفسي الشديد قبل الاختبارات القصيرة.',
-    confidentialNotes: [],
-    actionPlan: ''
-  }
-];
+export const INITIAL_REFERRALS: CounselingReferral[] = [];
 
-export const INITIAL_SUPPORT_TICKETS: SupportTicket[] = [
-  {
-    id: 'tkt-101',
-    studentName: 'سارة عبد الله العاصمي',
-    grade: 'الثالث المتوسط (3/أ)',
-    category: 'استفسار أكاديمي',
-    subject: 'طلب توضيح آلية درجات منتصف الفصل في مادة الرياضيات',
-    status: 'قيد المعالجة',
-    createdAt: '2026-02-08 09:15 ص',
-    lastUpdated: '2026-02-09 08:10 ص',
-    priority: 'متوسط',
-    messages: [
-      {
-        id: 'msg-t1',
-        senderRole: 'student',
-        senderName: 'سارة عبد الله العاصمي',
-        text: 'السلام عليكم ورحمة الله، أود الاستفسار عن توزيع درجات المشروعات العملية في مادة الرياضيات وهل تم احتساب حلول المسائل عبر المنصة؟',
-        timestamp: '2026-02-08 09:15 ص'
-      },
-      {
-        id: 'msg-t2',
-        senderRole: 'principal',
-        senderName: 'إدارة شؤون الطلاب - أ. عبد العزيز المقرن',
-        text: 'وعليكم السلام ورحمة الله وبركاته، أهلاً يا سارة. نعم، يتم احتساب 10% من الدرجة للأنشطة الذكية وحل الواجبات عبر منصة هتاف العاصمي. يسعدنا حرصك وتفوقك!',
-        timestamp: '2026-02-09 08:10 ص'
-      }
-    ]
-  },
-  {
-    id: 'tkt-102',
-    studentName: 'فيصل محمد الدوسري',
-    grade: 'الصف الثاني الثانوي',
-    category: 'طلب مستندات رسمية',
-    subject: 'طلب تعريف طالب إلكتروني مختوم لمسار الهندسة',
-    status: 'مكتمل',
-    createdAt: '2026-02-07 11:30 ص',
-    lastUpdated: '2026-02-07 14:00 م',
-    priority: 'عادي',
-    messages: [
-      {
-        id: 'msg-f1',
-        senderRole: 'student',
-        senderName: 'فيصل محمد الدوسري',
-        text: 'أرجو إصدار مشهد إثبات طالب لمسار الهندسة والحاسب موجه للجهات المعنية.',
-        timestamp: '2026-02-07 11:30 ص'
-      },
-      {
-        id: 'msg-f2',
-        senderRole: 'principal',
-        senderName: 'إدارة التسجيل والقبول',
-        text: 'تم إصدار المشهد رسمياً وتصديقه رقمياً. تجدون الملف مرفقاً أدناه.',
-        timestamp: '2026-02-07 14:00 م',
-        attachmentName: 'إثبات_طالب_مختوم_2026.pdf'
-      }
-    ]
-  }
-];
+export const INITIAL_SUPPORT_TICKETS: SupportTicket[] = [];
 
-export const INITIAL_STUDY_GROUPS: StudyGroup[] = [
-  {
-    id: 'group-math-m3',
-    name: 'غرفة مذاكرة الرياضيات - الثالث المتوسط',
-    subject: 'الرياضيات',
-    grade: 'الصف الثالث المتوسط',
-    membersCount: 28,
-    icon: '📐',
-    description: 'مجموعة مخصصة للمناقشة الجماعية وتداول حلول مسائل المعادلات التربيعية المنهجية.'
-  },
-  {
-    id: 'group-science-m3',
-    name: 'نادي العلوم والابتكار (الثالث المتوسط)',
-    subject: 'العلوم',
-    grade: 'الصف الثالث المتوسط',
-    membersCount: 22,
-    icon: '🧪',
-    description: 'مناقشة تجارب التفاعلات الكيميائية والجدول الدوري وتحضير الاختبارات القصيرة.'
-  },
-  {
-    id: 'group-ai-s2',
-    name: 'مجموعة مسار الهندسة والحاسب - الذكاء الاصطناعي',
-    subject: 'الذكاء الاصطناعي',
-    grade: 'الصف الثاني الثانوي',
-    membersCount: 19,
-    icon: '🤖',
-    description: 'نقاشات التعلم الآلي، البرمجة، وتطبيقات منصة مدرستي وعين.'
-  }
-];
+export const INITIAL_STUDY_GROUPS: StudyGroup[] = [];
 
-export const INITIAL_STUDY_MESSAGES: StudyGroupMessage[] = [
-  {
-    id: 'sgm-1',
-    groupId: 'group-math-m3',
-    senderName: 'سارة عبد الله العاصمي',
-    senderAvatar: '👧',
-    senderRole: 'student',
-    text: 'يا زميلاتي، من جربت حل مسألة المميز في صفحة 64؟ القانون هو ب² - 4 أ ج والحل دقيق جداً باستخدام المساعد الذكي!',
-    timestamp: 'منذ 10 دقائق',
-    problemCitation: {
-      question: 'أوجد مميز المعادلة: 2س² + 5س + 3 = 0',
-      finalAnswer: 'المميز = 1 (حلان حقيقيان نسبيا)',
-      bookName: 'الرياضيات - الثالث المتوسط',
-      page: 64
-    }
-  },
-  {
-    id: 'sgm-2',
-    groupId: 'group-math-m3',
-    senderName: 'نورة الفهد',
-    senderAvatar: '👩',
-    senderRole: 'student',
-    text: 'شرح ممتاز جداً يا سارة، جزاك الله خيراً! استوعبت خطوة التعويض الآن.',
-    timestamp: 'منذ 5 دقائق'
-  },
-  {
-    id: 'sgm-3',
-    groupId: 'group-math-m3',
-    senderName: 'أ. منصور العتيبي (معلم المادة)',
-    senderAvatar: '👨‍🏫',
-    senderRole: 'teacher',
-    text: 'ممتازات يا طالبات، إجابة سارة صحيحة 100%. واصلن المراجعة معاً ولا تترددن في طرح الأفكار الصعبة.',
-    timestamp: 'منذ دقيقتين'
-  }
-];
+export const INITIAL_STUDY_MESSAGES: StudyGroupMessage[] = [];
 
-export const INITIAL_AUDIT_LOGS: ModerationAuditLogItem[] = [
-  {
-    id: 'audit-1',
-    timestamp: '2026-02-09 08:32 ص',
-    actorName: 'نظام الفلترة الآلي (AI Content Guard)',
-    actorRole: 'super_admin',
-    action: 'تنبيه فلترة آلية',
-    targetUser: 'طالب في مجموعة العامة',
-    details: 'تم رصد استخدام كلمة غير لائق محتواه وتفعيل الحظر الآلي لمنع النشر في غرفة المذاكرة.',
-    severity: 'متوسط'
-  },
-  {
-    id: 'audit-2',
-    timestamp: '2026-02-08 11:20 ص',
-    actorName: 'أ. عبد العزيز المقرن (مدير النظام)',
-    actorRole: 'principal',
-    action: 'تحديث منهج من بوابة عين',
-    details: 'استنزال النسخة التفاعلية لكتاب الذكاء الاصطناعي 1 - مسارات 1447هـ.',
-    severity: 'منخفض'
-  },
-  {
-    id: 'audit-3',
-    timestamp: '2026-02-07 15:45 م',
-    actorName: 'د. إبراهيم السعيد (الموجه الطلابي)',
-    actorRole: 'counselor',
-    action: 'إغلاق تكت استفسار',
-    targetUser: 'سارة العاصمي',
-    details: 'إغلاق تكت التوجيه الأكاديمي بعد تزويد الطالبة بخطة المراجعة الذكية.',
-    severity: 'منخفض'
-  }
-];
+export const INITIAL_AUDIT_LOGS: ModerationAuditLogItem[] = [];
 

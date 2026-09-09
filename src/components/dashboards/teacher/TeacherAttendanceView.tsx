@@ -45,7 +45,7 @@ export const TeacherAttendanceView: React.FC<TeacherAttendanceViewProps> = ({
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [saveStatus, setSaveStatus] = useState<{ success: boolean; message: string } | null>(null);
 
-  const schoolId = currentSchool?.id || 'al-namouthajya';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
   const teacherId = currentUser?.id || 'teacher-default';
   const teacherName = currentUser?.fullName || 'المعلم المعتمد';
 

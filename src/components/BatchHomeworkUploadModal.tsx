@@ -15,12 +15,14 @@ interface BatchHomeworkUploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onBatchAddHomework: (homeworks: HomeworkAssignment[]) => void;
+  schoolId?: string;
 }
 
 export const BatchHomeworkUploadModal: React.FC<BatchHomeworkUploadModalProps> = ({
   isOpen,
   onClose,
-  onBatchAddHomework
+  onBatchAddHomework,
+  schoolId
 }) => {
   if (!isOpen) return null;
 
@@ -103,7 +105,7 @@ export const BatchHomeworkUploadModal: React.FC<BatchHomeworkUploadModalProps> =
           totalPoints,
           description,
           status: 'pending',
-          schoolSlug: 'al-namouthajya'
+          schoolSlug: schoolId || ''
         });
       }
 
@@ -112,46 +114,6 @@ export const BatchHomeworkUploadModal: React.FC<BatchHomeworkUploadModalProps> =
     };
 
     reader.readAsText(file, 'UTF-8');
-  };
-
-  // Load sample data for quick preview
-  const handleLoadSampleDemo = () => {
-    const samples: Partial<HomeworkAssignment>[] = [
-      {
-        title: 'واجب تطبيق الدوال الخطية ورسم البيانات',
-        subject: 'الرياضيات',
-        gradeLevel: 'الثالث المتوسط',
-        dueDate: '2026-02-16',
-        totalPoints: 10,
-        description: 'رسم البيانات المطلوبة في دفتر الرسم البياني مع شرح تفسيري.',
-        status: 'pending',
-        schoolSlug: 'al-namouthajya'
-      },
-      {
-        title: 'واجب تجربة تكافؤ العناصر وتكوين الروابط',
-        subject: 'العلوم',
-        gradeLevel: 'الثالث المتوسط',
-        dueDate: '2026-02-18',
-        totalPoints: 10,
-        description: 'تلخيص جدول العناصر الكيميائية وحل التجربة ص 52.',
-        status: 'pending',
-        schoolSlug: 'al-namouthajya'
-      },
-      {
-        title: 'واجب قواعد اللغة العربية - المفعول لأجله',
-        subject: 'اللغة العربية',
-        gradeLevel: 'الثالث المتوسط',
-        dueDate: '2026-02-22',
-        totalPoints: 5,
-        description: 'استخراج المفعول لأجله من الأبيات الشعرية المرفقة.',
-        status: 'pending',
-        schoolSlug: 'al-namouthajya'
-      }
-    ];
-
-    setParsedRows(samples);
-    setUploadedFileName('واجبات_الأسبوع_المقبل_نموذجي.csv');
-    setSuccessNotice('تم تحضير 3 واجبات تجريبية جاهزة للاستيراد المباشر.');
   };
 
   const handleConfirmBatchUpload = () => {
@@ -164,8 +126,8 @@ export const BatchHomeworkUploadModal: React.FC<BatchHomeworkUploadModalProps> =
       dueDate: item.dueDate || '2026-02-28',
       totalPoints: item.totalPoints || 10,
       status: 'pending',
-      schoolSlug: item.schoolSlug || 'al-namouthajya',
-      gradeLevel: item.gradeLevel || 'الثالث المتوسط',
+      schoolSlug: item.schoolSlug || schoolId || '',
+      gradeLevel: item.gradeLevel || 'الصف الدراسي',
       description: item.description || ''
     }));
 
@@ -209,14 +171,6 @@ export const BatchHomeworkUploadModal: React.FC<BatchHomeworkUploadModalProps> =
             >
               <Download className="w-4 h-4 text-emerald-600" />
               <span>تحميل نموذج CSV القياسي</span>
-            </button>
-
-            <button
-              onClick={handleLoadSampleDemo}
-              className="bg-emerald-50 hover:bg-emerald-100 text-emerald-900 text-xs font-bold px-3.5 py-2 rounded-xl border border-emerald-300 flex items-center gap-1.5 transition"
-            >
-              <Plus className="w-4 h-4 text-emerald-600" />
-              <span>تعبئة واجبات تجريبية</span>
             </button>
           </div>
 

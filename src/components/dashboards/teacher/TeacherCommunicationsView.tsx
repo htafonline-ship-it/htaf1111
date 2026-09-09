@@ -50,7 +50,7 @@ export const TeacherCommunicationsView: React.FC<TeacherCommunicationsViewProps>
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string>('');
 
-  const schoolId = currentSchool?.id || 'al-namouthajya';
+  const schoolId = currentSchool?.id || currentUser?.schoolId || '';
   const teacherId = currentUser?.id || 'teacher-default';
   const teacherName = currentUser?.fullName || 'المعلم المعتمد';
 

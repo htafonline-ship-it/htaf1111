@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { DynamicPageBlock, CustomFieldItem, DynamicFormSubmission } from '../../types/dynamicPages';
 import { UserRole, AuthUser } from '../../types';
 import { saveDynamicFormSubmission } from '../../lib/dynamicPagesService';
+import { ScrollFadeIn } from '../ScrollFadeIn';
 import {
   Sparkles,
   Sliders,
@@ -177,16 +178,21 @@ export const DynamicPageSectionRenderer: React.FC<DynamicPageSectionRendererProp
   return (
     <div className="space-y-4 my-4">
       {/* Dynamic Blocks List */}
-      {filteredBlocks.map(block => {
+      {filteredBlocks.map((block, index) => {
         if (dismissedBanners[block.id]) return null;
         const color = getColorClasses(block.colorScheme);
 
         return (
-          <div
+          <ScrollFadeIn
             key={block.id}
-            id={block.id}
-            className={`relative rounded-2xl border backdrop-blur-md p-4 sm:p-6 transition-all shadow-lg ${color.bg} ${!block.isActive ? 'opacity-60 border-dashed border-amber-500/50' : ''}`}
+            delay={Math.min(index * 90, 450)}
+            threshold={0.08}
+            className="w-full"
           >
+            <div
+              id={block.id}
+              className={`relative rounded-2xl border backdrop-blur-md p-4 sm:p-6 transition-all shadow-lg ${color.bg} ${!block.isActive ? 'opacity-60 border-dashed border-amber-500/50' : ''}`}
+            >
             {/* Admin Block Header Controls */}
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
@@ -497,7 +503,8 @@ export const DynamicPageSectionRenderer: React.FC<DynamicPageSectionRendererProp
                 {block.data.notes}
               </div>
             )}
-          </div>
+            </div>
+          </ScrollFadeIn>
         );
       })}
 

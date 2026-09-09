@@ -699,6 +699,34 @@ export interface UpcomingExam {
   difficulty: string;
 }
 
+export interface StudentQuizResult {
+  id: string;
+  bookId: string;
+  bookTitle: string;
+  subject: string;
+  grade: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  passed: boolean;
+  completedAt: string;
+  timeSpentSeconds: number;
+  unlockedNewChallenge?: boolean;
+}
+
+export interface StudentChallengeBadge {
+  id: string;
+  title: string; // e.g. 'تحدي جديد'
+  description?: string;
+  subject: string;
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  unlockedAt: string;
+  bookTitle?: string;
+  icon?: string;
+}
+
 export interface StudentProfile {
   id: string;
   name: string;
@@ -711,12 +739,16 @@ export interface StudentProfile {
   aiQuestionsCountToday: number;
   subjectsPerformance: SubjectPerformance[];
   upcomingExams: UpcomingExam[];
-  aiRevisionPlan: {
+  aiRevisionPlan?: {
     title: string;
     description: string;
     daysCount: number;
     tasks: { day: number; title: string; completed: boolean; subject: string }[];
   };
+  quizResults?: StudentQuizResult[];
+  badges?: string[];
+  newChallengeBadge?: StudentChallengeBadge | null;
+  hasNewChallengeBadge?: boolean;
 }
 
 export interface CounselingReferral {

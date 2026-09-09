@@ -49,6 +49,8 @@ import {
   isSupabaseConfigured
 } from '../../lib/supabase';
 import { AchievementsPortfolioView } from '../achievements/AchievementsPortfolioView';
+import { ScrollFadeIn } from '../ScrollFadeIn';
+import { StudentAnalyticsCharts } from './StudentAnalyticsCharts';
 
 interface StudentDashboardProps {
   profile: StudentProfile;
@@ -86,17 +88,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const isAuthenticated = !!currentUser;
   const realStudentName = currentUser 
     ? (currentUser.fullName || currentUser.username || currentUser.email?.split('@')[0] || 'طالب مسجل')
-    : (profile.name && profile.name !== 'سارة عبد الله العاصمي' ? profile.name : 'زائر المنصة (غير مسجل)');
+    : (profile.name || 'طالب مسجل');
 
   // Edit Profile / Real Data Modal State
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [editedName, setEditedName] = useState(realStudentName);
-  const [editedGrade, setEditedGrade] = useState(profile.grade || 'الصف الثالث المتوسط (شعبة 3/أ)');
+  const [editedGrade, setEditedGrade] = useState(profile.grade || 'غير محدد');
   const [editedAvatar, setEditedAvatar] = useState(profile.avatar || '🧑‍🎓');
-  const [editedDailyQuestions, setEditedDailyQuestions] = useState(profile.aiQuestionsCountToday ?? 8);
-  const [editedScreenTime, setEditedScreenTime] = useState(profile.screenTimeUsedTodayMinutes ?? 42);
-  const [editedScreenLimit, setEditedScreenLimit] = useState(profile.screenTimeDailyLimitMinutes ?? 90);
-  const [streakDays, setStreakDays] = useState(14);
+  const [editedDailyQuestions, setEditedDailyQuestions] = useState(profile.aiQuestionsCountToday ?? 0);
+  const [editedScreenTime, setEditedScreenTime] = useState(profile.screenTimeUsedTodayMinutes ?? 0);
+  const [editedScreenLimit, setEditedScreenLimit] = useState(profile.screenTimeDailyLimitMinutes ?? 120);
+  const [streakDays, setStreakDays] = useState(0);
   const [streakCheckedToday, setStreakCheckedToday] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -171,6 +173,19 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     if (profile) setLiveProfile(profile);
   }, [profile]);
 
+  // Real-time listener for profile updates from QuizModal or elsewhere
+  useEffect(() => {
+    const handleProfileEvent = (evt: any) => {
+      if (evt.detail) {
+        setLiveProfile((prev) => ({ ...prev, ...evt.detail }));
+      }
+    };
+    window.addEventListener('htaf_student_profile_updated', handleProfileEvent);
+    return () => {
+      window.removeEventListener('htaf_student_profile_updated', handleProfileEvent);
+    };
+  }, []);
+
   useEffect(() => {
     if (homeworks) setLiveHomeworks(homeworks);
   }, [homeworks]);
@@ -185,10 +200,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const currentActiveProfile = liveProfile || profile;
   const currentActiveHomeworks = liveHomeworks && liveHomeworks.length > 0 ? liveHomeworks : homeworks;
 
+  const hasNewChallenge = Boolean(
+    currentActiveProfile.hasNewChallengeBadge ||
+    (Array.isArray(currentActiveProfile.badges) && currentActiveProfile.badges.includes('تحدي جديد')) ||
+    currentActiveProfile.newChallengeBadge ||
+    (Array.isArray(currentActiveProfile.quizResults) && currentActiveProfile.quizResults.some((q) => q.percentage >= 80))
+  );
+
   const totalScores = currentActiveProfile.subjectsPerformance?.reduce((acc, curr) => acc + curr.scorePercentage, 0) || 0;
   const calculatedGpa = currentActiveProfile.subjectsPerformance?.length 
     ? Math.round(totalScores / currentActiveProfile.subjectsPerformance.length) 
-    : 94;
+    : 0;
 
   const completedHomeworkCount = currentActiveHomeworks.filter((h) => h.status === 'submitted' || h.status === 'graded').length;
   const totalHomeworkCount = currentActiveHomeworks.length;
@@ -466,9 +488,9 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     setQuizSubmitted(true);
   };
 
-  const completedRevisionCount = profile.aiRevisionPlan.tasks.filter((t) => t.completed).length;
-  const totalRevisionCount = profile.aiRevisionPlan.tasks.length;
-  const revisionProgressPct = Math.round((completedRevisionCount / (totalRevisionCount || 1)) * 100);
+  const completedRevisionCount = currentActiveProfile.aiRevisionPlan?.tasks?.filter((t) => t.completed).length || 0;
+  const totalRevisionCount = currentActiveProfile.aiRevisionPlan?.tasks?.length || 0;
+  const revisionProgressPct = totalRevisionCount > 0 ? Math.round((completedRevisionCount / totalRevisionCount) * 100) : 0;
 
   return (
     <div className="space-y-10 selection:bg-cyan-500 selection:text-slate-950">
@@ -553,7 +575,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   مرحباً بك، <span className="bg-gradient-to-r from-cyan-400 via-blue-300 to-purple-300 bg-clip-text text-transparent">
                     {isAuthenticated 
                       ? (currentUser?.fullName || currentUser?.username || currentUser?.email?.split('@')[0] || editedName)
-                      : (editedName !== 'سارة عبد الله العاصمي' ? editedName : 'زائر المنصة')}
+                      : (editedName || 'طالب مسجل')}
                   </span> 👋
                 </h1>
                 
@@ -570,6 +592,26 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                     <LogIn className="w-3.5 h-3.5 text-amber-400" />
                     <span>جلسة تجريبية (انقر لتسجيل الدخول)</span>
                   </button>
+                )}
+
+                {/* شارة "تحدي جديد" عند اجتياز اختبار بنسبة تفوق 80% */}
+                {hasNewChallenge && (
+                  <div
+                    onClick={() => {
+                      const elem = document.getElementById('student-challenges-section');
+                      elem?.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="inline-flex items-center gap-1.5 bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-500 text-slate-950 text-xs font-black px-3 py-1 rounded-full border border-yellow-200 shadow-md shadow-amber-500/20 animate-pulse cursor-pointer hover:scale-105 transition"
+                    title="شارة «تحدي جديد» محققة بنسبة تفوق 80%! انقر لعرض التفاصيل"
+                  >
+                    <Award className="w-3.5 h-3.5 fill-slate-950 text-slate-950" />
+                    <span>🏆 شارة «تحدي جديد»</span>
+                    {currentActiveProfile.newChallengeBadge?.percentage ? (
+                      <span className="bg-slate-950/20 px-1.5 py-0.2 rounded-full text-[10px] font-black">
+                        {currentActiveProfile.newChallengeBadge.percentage}%
+                      </span>
+                    ) : null}
+                  </div>
                 )}
 
                 <button
@@ -627,15 +669,15 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           </div>
 
           {/* Quick Real Metrics Cards */}
-          <div className="grid grid-cols-3 gap-3 sm:gap-4 w-full lg:w-auto shrink-0">
+          <div className={`grid ${hasNewChallenge ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-3 sm:gap-4 w-full lg:w-auto shrink-0`}>
             {/* GPA */}
             <div 
               onClick={() => {
-                const elem = document.getElementById('academic-performance-section');
+                const elem = document.getElementById('student-analytics-charts-section');
                 elem?.scrollIntoView({ behavior: 'smooth' });
               }}
               className="bg-[#0b142c]/90 border border-amber-500/30 p-3.5 sm:p-4 rounded-2xl text-center shadow-lg relative group overflow-hidden cursor-pointer hover:border-amber-400 transition"
-              title="انقر لعرض تفاصيل معدل المواد"
+              title="انقر لعرض الرسوم البيانية التفاعلية ومسار التفوق"
             >
               <div className="absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400 to-transparent opacity-60" />
               <div className="text-2xl sm:text-3xl font-black text-amber-400 tracking-tight">{calculatedGpa}%</div>
@@ -646,11 +688,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             {/* Completed Homework */}
             <div 
               onClick={() => {
-                const elem = document.getElementById('feature-card-quizzes');
+                const elem = document.getElementById('student-analytics-charts-section');
                 elem?.scrollIntoView({ behavior: 'smooth' });
               }}
               className="bg-[#0b142c]/90 border border-cyan-500/30 p-3.5 sm:p-4 rounded-2xl text-center shadow-lg relative group overflow-hidden cursor-pointer hover:border-cyan-400 transition"
-              title="عرض قائمة الواجبات"
+              title="انقر لعرض تفاعل المهام والواجبات عبر الوقت"
             >
               <div className="absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-cyan-400 to-transparent opacity-60" />
               <div className="text-2xl sm:text-3xl font-black text-cyan-400 tracking-tight">
@@ -678,6 +720,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 {streakCheckedToday ? '✓ تم تسجيل اليوم' : 'نشاط وتفوق مستمر (انقر)'}
               </div>
             </div>
+
+            {/* New Challenge Badge Quick Metric Card */}
+            {hasNewChallenge && (
+              <div 
+                onClick={() => {
+                  const elem = document.getElementById('student-challenges-section');
+                  elem?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className="bg-[#0b142c]/95 border-2 border-amber-400 p-3.5 sm:p-4 rounded-2xl text-center shadow-lg relative group overflow-hidden cursor-pointer hover:border-yellow-300 hover:scale-105 transition"
+                title="انقر لعرض تفاصيل شارة التحدي الجديد وسجل الاختبارات"
+              >
+                <div className="absolute top-0 right-0 left-0 h-[2px] bg-gradient-to-r from-transparent via-amber-300 to-transparent" />
+                <div className="text-2xl sm:text-3xl font-black text-amber-300 tracking-tight flex items-center justify-center gap-1">
+                  <span>🏆</span>
+                  <span>{currentActiveProfile.newChallengeBadge?.percentage || 100}%</span>
+                </div>
+                <div className="text-[11px] text-amber-200 font-black mt-0.5">تحدي جديد</div>
+                <div className="text-[9px] text-amber-400 font-bold mt-1">
+                  شارة نشطة ✨ (انقر)
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -790,6 +854,86 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
         </div>
       )}
 
+      {/* 1.5. NEW CHALLENGE BADGE & RECENT QUIZZES SHOWCASE SECTION */}
+      {hasNewChallenge && (
+        <section id="student-challenges-section" className="bg-gradient-to-r from-amber-950/40 via-yellow-950/30 to-[#0b142c] border-2 border-amber-500/50 rounded-3xl p-5 sm:p-7 shadow-xl relative overflow-hidden backdrop-blur-md">
+          <div className="absolute -top-20 -right-20 w-60 h-60 bg-amber-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-5 relative z-10">
+            <div className="flex items-start sm:items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center text-3xl font-black shadow-lg shadow-amber-500/30 shrink-0 ring-4 ring-amber-300/40 animate-bounce">
+                🏆
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="bg-gradient-to-r from-amber-400 to-yellow-400 text-slate-950 text-xs font-black px-3 py-0.5 rounded-full shadow-sm flex items-center gap-1">
+                    <Award className="w-3.5 h-3.5 text-slate-950 fill-current" />
+                    <span>شارة «تحدي جديد» معتمدة</span>
+                  </span>
+                  <span className="text-amber-300 font-extrabold text-xs">
+                    نسبة الإتقان: {currentActiveProfile.newChallengeBadge?.percentage || 100}% (أعلى من 80%)
+                  </span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  تهانينا! أحرزت شارة التحدي في {currentActiveProfile.newChallengeBadge?.bookTitle || currentActiveProfile.newChallengeBadge?.subject || 'المقررات الدراسية'}
+                </h3>
+                <p className="text-xs sm:text-sm text-blue-200/80 leading-relaxed max-w-2xl font-medium">
+                  تم توثيق هذا الإنجاز بنجاح داخل ملف الطالب (<span className="font-mono text-cyan-300 font-bold">StudentProfile</span>). استمر في إنجاز اختبارات المقررات الأخرى في مكتبة المناهج للحفاظ على شارة التحدي وإثراء ملفك الرقمي.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 w-full md:w-auto">
+              <button
+                onClick={() => onNavigateTab && onNavigateTab('curriculum')}
+                className="w-full md:w-auto bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-300 hover:to-yellow-300 text-slate-950 font-black text-xs px-5 py-3 rounded-2xl shadow-lg shadow-amber-500/25 flex items-center justify-center gap-2 transition cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4 text-slate-950" />
+                <span>خوض اختبار كتاب آخر 🎯</span>
+              </button>
+            </div>
+          </div>
+
+          {/* List of Recent Quiz Results from StudentProfile */}
+          {Array.isArray(currentActiveProfile.quizResults) && currentActiveProfile.quizResults.length > 0 && (
+            <div className="mt-5 pt-5 border-t border-amber-500/20">
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h4 className="text-xs sm:text-sm font-black text-amber-200 flex items-center gap-1.5">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>سجل الاختبارات المنهجية السريعة الأخيرة (ملف الطالب):</span>
+                </h4>
+                <span className="text-[11px] text-blue-300/70 font-bold">
+                  إجمالي الاختبارات المنجزة: {currentActiveProfile.quizResults.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {currentActiveProfile.quizResults.slice(0, 3).map((quiz) => (
+                  <div
+                    key={quiz.id}
+                    className="bg-[#070e24]/90 border border-blue-900/60 hover:border-amber-400/40 rounded-2xl p-3.5 flex items-center justify-between text-xs transition"
+                  >
+                    <div className="truncate pr-2">
+                      <p className="font-black text-white truncate">{quiz.bookTitle}</p>
+                      <p className="text-[11px] text-blue-300/70 mt-0.5">{quiz.subject} • {quiz.grade || ''}</p>
+                    </div>
+                    <div className="text-left shrink-0">
+                      <span className={`px-2.5 py-1 rounded-xl text-[11px] font-black inline-flex items-center gap-1 ${
+                        quiz.percentage >= 80 
+                          ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40' 
+                          : 'bg-blue-900/40 text-blue-200 border border-blue-800/40'
+                      }`}>
+                        {quiz.percentage >= 80 && <span>🏆</span>}
+                        <span>{quiz.percentage}%</span>
+                        <span className="text-[10px] text-slate-400 font-bold">({quiz.score}/{quiz.totalQuestions})</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* 2. PRIMARY FEATURE TOOL CARDS (Large, Glowing Border on Hover, Smooth Elevation) */}
       <section className="space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-blue-900/40 pb-3">
@@ -811,77 +955,84 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
 
         {/* 6 Large Interactive Glowing Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mainFeatureCards.map((card) => {
+          {mainFeatureCards.map((card, idx) => {
             const isActive = activeCardId === card.id;
             return (
-              <div
+              <ScrollFadeIn
                 key={card.id}
-                id={`feature-card-${card.id}`}
-                onClick={() => setActiveCardId(card.id)}
-                className={`hattan-interactive-card group p-6 sm:p-7 flex flex-col justify-between cursor-pointer ${
-                  isActive ? 'is-active ring-1 ring-cyan-500/40' : ''
-                }`}
+                delay={idx * 75}
+                threshold={0.08}
+                className="h-full flex flex-col"
               >
-                {/* Subtle Ambient Background Gradient */}
-                <div className={`absolute -top-16 -right-16 w-36 h-36 rounded-full blur-2xl pointer-events-none opacity-40 group-hover:opacity-80 transition-opacity bg-gradient-to-br ${card.accentColor}`} />
+                <div
+                  id={`feature-card-${card.id}`}
+                  onClick={() => setActiveCardId(card.id)}
+                  className={`h-full hattan-interactive-card group p-6 sm:p-7 flex flex-col justify-between cursor-pointer ${
+                    isActive ? 'is-active ring-1 ring-cyan-500/40' : ''
+                  }`}
+                >
+                  {/* Subtle Ambient Background Gradient */}
+                  <div className={`absolute -top-16 -right-16 w-36 h-36 rounded-full blur-2xl pointer-events-none opacity-40 group-hover:opacity-80 transition-opacity bg-gradient-to-br ${card.accentColor}`} />
 
-                <div className="space-y-4 relative z-10">
-                  {/* Top Row: Icon & Badges */}
-                  <div className="flex items-center justify-between">
-                    <div className={`w-14 h-14 rounded-2xl bg-[#0b1633] border border-blue-500/30 flex items-center justify-center p-3 shadow-inner group-hover:border-cyan-400/60 transition-colors`}>
-                      {card.icon}
+                  <div className="space-y-4 relative z-10">
+                    {/* Top Row: Icon & Badges */}
+                    <div className="flex items-center justify-between">
+                      <div className={`w-14 h-14 rounded-2xl bg-[#0b1633] border border-blue-500/30 flex items-center justify-center p-3 shadow-inner group-hover:border-cyan-400/60 transition-colors`}>
+                        {card.icon}
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-1.5 justify-end">
+                        {card.badges.map((badge, bIdx) => (
+                          <span
+                            key={bIdx}
+                            className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-950/80 text-blue-200 border border-blue-800/50 group-hover:border-cyan-500/40 transition-colors"
+                          >
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-1.5 justify-end">
-                      {card.badges.map((badge, bIdx) => (
-                        <span
-                          key={bIdx}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-blue-950/80 text-blue-200 border border-blue-800/50 group-hover:border-cyan-500/40 transition-colors"
-                        >
-                          {badge}
-                        </span>
-                      ))}
+                    {/* Title & Subtitle */}
+                    <div>
+                      <h3 className="text-lg font-black text-white group-hover:text-cyan-300 transition-colors">
+                        {card.title}
+                      </h3>
+                      <p className="text-xs font-semibold text-blue-300/80 mt-0.5">
+                        {card.subtitle}
+                      </p>
                     </div>
-                  </div>
 
-                  {/* Title & Subtitle */}
-                  <div>
-                    <h3 className="text-lg font-black text-white group-hover:text-cyan-300 transition-colors">
-                      {card.title}
-                    </h3>
-                    <p className="text-xs font-semibold text-blue-300/80 mt-0.5">
-                      {card.subtitle}
+                    {/* Description */}
+                    <p className="text-xs text-slate-300/80 leading-relaxed font-medium">
+                      {card.description}
                     </p>
                   </div>
 
-                  {/* Description */}
-                  <p className="text-xs text-slate-300/80 leading-relaxed font-medium">
-                    {card.description}
-                  </p>
+                  {/* Bottom CTA Action Button */}
+                  <div className="pt-6 relative z-10">
+                    <button
+                      id={`btn-action-${card.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        card.action();
+                      }}
+                      className={`w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all transform active:scale-98 ${card.btnGlow}`}
+                    >
+                      <span>{card.btnText}</span>
+                      <ArrowRight className="w-4 h-4 rtl:rotate-180 group-hover:translate-x-[-3px] transition-transform" />
+                    </button>
+                  </div>
                 </div>
-
-                {/* Bottom CTA Action Button */}
-                <div className="pt-6 relative z-10">
-                  <button
-                    id={`btn-action-${card.id}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      card.action();
-                    }}
-                    className={`w-full py-3 px-4 rounded-xl font-black text-xs flex items-center justify-center gap-2 transition-all transform active:scale-98 ${card.btnGlow}`}
-                  >
-                    <span>{card.btnText}</span>
-                    <ArrowRight className="w-4 h-4 rtl:rotate-180 group-hover:translate-x-[-3px] transition-transform" />
-                  </button>
-                </div>
-              </div>
+              </ScrollFadeIn>
             );
           })}
         </div>
       </section>
 
       {/* 3. DAILY SCHEDULE (الجدول الدراسي اليومي) */}
-      <section className="space-y-4">
+      <ScrollFadeIn threshold={0.08} delay={60}>
+        <section className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-cyan-400">
@@ -953,9 +1104,22 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           })}
         </div>
       </section>
+    </ScrollFadeIn>
+
+      {/* INTERACTIVE RECHARTS ANALYTICS: ACADEMIC PROGRESS & TASKS OVER TIME */}
+      <ScrollFadeIn threshold={0.06}>
+        <div id="student-analytics-charts-section">
+          <StudentAnalyticsCharts
+            profile={currentActiveProfile}
+            homeworks={currentActiveHomeworks}
+            calculatedGpa={calculatedGpa}
+          />
+        </div>
+      </ScrollFadeIn>
 
       {/* 4. UPCOMING QUIZZES & ACTIVE HOMEWORKS SECTION */}
-      <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <ScrollFadeIn threshold={0.06}>
+        <section className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Left Column (7 cols): Quizzes & Homework with OCR Solver Trigger */}
         <div className="lg:col-span-7 space-y-6">
           {/* Upcoming Quizzes */}
@@ -971,37 +1135,45 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
 
             <div className="space-y-3">
-              {quizzes.map((qz) => (
-                <div
-                  key={qz.id}
-                  className="p-4 rounded-2xl bg-[#080e22] border border-blue-900/40 hover:border-cyan-500/40 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-cyan-300 bg-cyan-950/70 border border-cyan-800/50 px-2.5 py-0.5 rounded-md">
-                        {qz.subject}
-                      </span>
-                      <span className="text-xs text-slate-400 font-medium">
-                        ⏱️ {qz.durationMinutes} دقيقة • {qz.questions.length} أسئلة
-                      </span>
-                    </div>
-                    <h4 className="font-extrabold text-white text-sm">{qz.title}</h4>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setActiveQuiz(qz);
-                      setQuizAnswers({});
-                      setQuizSubmitted(false);
-                      setQuizScore(0);
-                    }}
-                    className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 shrink-0 transition"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-white" />
-                    <span>بدء الاختبار الآن</span>
-                  </button>
+              {quizzes.length === 0 ? (
+                <div className="p-8 text-center bg-[#080e22] rounded-2xl border border-blue-900/30 space-y-2">
+                  <Sparkles className="w-8 h-8 text-cyan-400 mx-auto opacity-70" />
+                  <p className="text-xs font-bold text-slate-300">لا توجد اختبارات قصيرة متاحة حالياً</p>
+                  <p className="text-[11px] text-slate-500">سيتم إدراج الاختبارات التشخيصية فور تكليف المعلم بها أو إتاحتها من المنصة.</p>
                 </div>
-              ))}
+              ) : (
+                quizzes.map((qz) => (
+                  <div
+                    key={qz.id}
+                    className="p-4 rounded-2xl bg-[#080e22] border border-blue-900/40 hover:border-cyan-500/40 transition flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                  >
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-cyan-300 bg-cyan-950/70 border border-cyan-800/50 px-2.5 py-0.5 rounded-md">
+                          {qz.subject}
+                        </span>
+                        <span className="text-xs text-slate-400 font-medium">
+                          ⏱️ {qz.durationMinutes} دقيقة • {qz.questions.length} أسئلة
+                        </span>
+                      </div>
+                      <h4 className="font-extrabold text-white text-sm">{qz.title}</h4>
+                    </div>
+
+                    <button
+                      onClick={() => {
+                        setActiveQuiz(qz);
+                        setQuizAnswers({});
+                        setQuizSubmitted(false);
+                        setQuizScore(0);
+                      }}
+                      className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-extrabold text-xs px-4 py-2.5 rounded-xl shadow-md shadow-blue-600/20 flex items-center justify-center gap-1.5 shrink-0 transition"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-white" />
+                      <span>بدء الاختبار الآن</span>
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
@@ -1027,82 +1199,90 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
 
             <div className="space-y-3">
-              {currentActiveHomeworks.map((hw) => {
-                const isGraded = hw.status === 'graded';
-                const isSubmitted = hw.status === 'submitted';
+              {currentActiveHomeworks.length === 0 ? (
+                <div className="p-8 text-center bg-[#080e22] rounded-2xl border border-blue-900/30 space-y-2">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto opacity-70" />
+                  <p className="text-xs font-bold text-slate-300">لا توجد واجبات دراسية مطلوبة حالياً</p>
+                  <p className="text-[11px] text-slate-500">سيتم إدراج الواجبات المدرسية الجديدة هنا فور تكليف المعلم بها.</p>
+                </div>
+              ) : (
+                currentActiveHomeworks.map((hw) => {
+                  const isGraded = hw.status === 'graded';
+                  const isSubmitted = hw.status === 'submitted';
 
-                return (
-                  <div
-                    key={hw.id}
-                    className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
-                      isGraded 
-                        ? 'bg-[#081224] border-emerald-500/40' 
-                        : isSubmitted 
-                        ? 'bg-[#081028] border-cyan-500/40' 
-                        : 'bg-[#080e22] border-blue-900/40 hover:border-purple-500/40'
-                    }`}
-                  >
-                    <div className="space-y-1.5 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-bold text-purple-300 bg-purple-950/70 border border-purple-800/50 px-2.5 py-0.5 rounded-md">
-                          {hw.subject}
-                        </span>
-                        <span className="text-xs text-slate-400 font-medium">
-                          📅 موعد التسليم: {hw.dueDate}
-                        </span>
-
-                        {isGraded && (
-                          <span className="text-[11px] font-black text-emerald-300 bg-emerald-950/80 border border-emerald-700/50 px-2 py-0.5 rounded-md flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            مصحح: {hw.score ?? 10} / 10
+                  return (
+                    <div
+                      key={hw.id}
+                      className={`p-4 rounded-2xl border transition flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${
+                        isGraded 
+                          ? 'bg-[#081224] border-emerald-500/40' 
+                          : isSubmitted 
+                          ? 'bg-[#081028] border-cyan-500/40' 
+                          : 'bg-[#080e22] border-blue-900/40 hover:border-purple-500/40'
+                      }`}
+                    >
+                      <div className="space-y-1.5 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-bold text-purple-300 bg-purple-950/70 border border-purple-800/50 px-2.5 py-0.5 rounded-md">
+                            {hw.subject}
                           </span>
-                        )}
-
-                        {isSubmitted && !isGraded && (
-                          <span className="text-[11px] font-black text-cyan-300 bg-cyan-950/80 border border-cyan-700/50 px-2 py-0.5 rounded-md">
-                            ⏳ تم التسليم
+                          <span className="text-xs text-slate-400 font-medium">
+                            📅 موعد التسليم: {hw.dueDate}
                           </span>
+
+                          {isGraded && (
+                            <span className="text-[11px] font-black text-emerald-300 bg-emerald-950/80 border border-emerald-700/50 px-2 py-0.5 rounded-md flex items-center gap-1">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              مصحح: {hw.score ?? 10} / 10
+                            </span>
+                          )}
+
+                          {isSubmitted && !isGraded && (
+                            <span className="text-[11px] font-black text-cyan-300 bg-cyan-950/80 border border-cyan-700/50 px-2 py-0.5 rounded-md">
+                              ⏳ تم التسليم
+                            </span>
+                          )}
+                        </div>
+
+                        <h4 className="font-extrabold text-white text-sm">{hw.title}</h4>
+                        <p className="text-xs text-slate-300/80 leading-relaxed font-medium">{hw.description}</p>
+                        
+                        {hw.feedback && (
+                          <div className="text-[11px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-800/30 rounded-lg p-2 mt-1">
+                            💡 ملاحظات المعلم: {hw.feedback}
+                          </div>
                         )}
                       </div>
 
-                      <h4 className="font-extrabold text-white text-sm">{hw.title}</h4>
-                      <p className="text-xs text-slate-300/80 leading-relaxed font-medium">{hw.description}</p>
-                      
-                      {hw.feedback && (
-                        <div className="text-[11px] text-emerald-300/90 bg-emerald-950/40 border border-emerald-800/30 rounded-lg p-2 mt-1">
-                          💡 ملاحظات المعلم: {hw.feedback}
-                        </div>
-                      )}
-                    </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => onOpenSolverForHomework(hw)}
+                          className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md shadow-purple-600/20 flex items-center justify-center gap-1.5 transition"
+                          title="تحليل واستخراج خطوات الحل التفاعلية بالذكاء الاصطناعي"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>حل ذكي</span>
+                        </button>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => onOpenSolverForHomework(hw)}
-                        className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md shadow-purple-600/20 flex items-center justify-center gap-1.5 transition"
-                        title="تحليل واستخراج خطوات الحل التفاعلية بالذكاء الاصطناعي"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" />
-                        <span>حل ذكي</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setSubmittingHomework(hw);
-                          setSubmissionText('');
-                        }}
-                        className={`font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 transition ${
-                          isGraded
-                            ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 hover:bg-emerald-900/80'
-                            : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/20'
-                        }`}
-                      >
-                        <UploadCloud className="w-3.5 h-3.5" />
-                        <span>{isGraded ? 'إعادة التسليم' : 'تسليم الواجب'}</span>
-                      </button>
+                        <button
+                          onClick={() => {
+                            setSubmittingHomework(hw);
+                            setSubmissionText('');
+                          }}
+                          className={`font-extrabold text-xs px-3.5 py-2.5 rounded-xl shadow-md flex items-center justify-center gap-1.5 transition ${
+                            isGraded
+                              ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 hover:bg-emerald-900/80'
+                              : 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-cyan-500/20'
+                          }`}
+                        >
+                          <UploadCloud className="w-3.5 h-3.5" />
+                          <span>{isGraded ? 'إعادة التسليم' : 'تسليم الواجب'}</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -1113,64 +1293,76 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="bg-gradient-to-br from-[#121c3d] via-[#0d1633] to-[#070d1e] text-white rounded-3xl p-6 sm:p-7 shadow-xl border border-cyan-500/30 space-y-5 relative overflow-hidden">
             <div className="absolute top-0 right-0 w-48 h-48 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none" />
 
-            <div className="flex items-start justify-between relative z-10">
-              <div>
-                <div className="inline-flex items-center gap-1.5 bg-cyan-500/20 text-cyan-300 text-xs font-bold px-3 py-1 rounded-full border border-cyan-500/30 mb-2">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-                  خطة التفوق الذكية قبل الاختبارات
-                </div>
-                <h3 className="text-lg font-black text-white">{currentActiveProfile.aiRevisionPlan.title}</h3>
-                <p className="text-xs text-blue-200/80 mt-1 leading-relaxed">{currentActiveProfile.aiRevisionPlan.description}</p>
-              </div>
-
-              <div className="text-cyan-400 font-black text-lg bg-[#070e24] px-3.5 py-1.5 rounded-xl border border-cyan-500/40 shrink-0">
-                {completedRevisionCount} / {totalRevisionCount}
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="space-y-1.5 relative z-10">
-              <div className="flex justify-between text-xs font-bold text-slate-300">
-                <span>نسبة إنجاز الخطة</span>
-                <span className="text-cyan-300 font-extrabold">{revisionProgressPct}%</span>
-              </div>
-              <div className="w-full bg-[#070e24] rounded-full h-2.5 overflow-hidden border border-blue-900/40">
-                <div
-                  className="bg-gradient-to-r from-cyan-400 to-purple-500 h-2.5 rounded-full transition-all duration-500"
-                  style={{ width: `${revisionProgressPct}%` }}
-                />
-              </div>
-            </div>
-
-            {/* Checklist items */}
-            <div className="space-y-2.5 pt-1 relative z-10">
-              {currentActiveProfile.aiRevisionPlan.tasks.map((task) => (
-                <div
-                  key={task.day}
-                  onClick={() => onUpdateRevisionTask(task.day, !task.completed)}
-                  className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
-                    task.completed
-                      ? 'bg-[#081024]/80 text-slate-400 border-slate-800 line-through'
-                      : 'bg-[#0a132c] text-slate-100 border-blue-900/50 hover:border-cyan-400/60'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    {task.completed ? (
-                      <CheckSquare className="w-5 h-5 text-cyan-400 shrink-0" />
-                    ) : (
-                      <Square className="w-5 h-5 text-slate-500 shrink-0" />
-                    )}
-                    <span className="text-xs font-medium">
-                      اليوم {task.day}: {task.title}
-                    </span>
+            {currentActiveProfile.aiRevisionPlan?.title && (currentActiveProfile.aiRevisionPlan.tasks?.length ?? 0) > 0 ? (
+              <>
+                <div className="flex items-start justify-between relative z-10">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 bg-cyan-500/20 text-cyan-300 text-xs font-bold px-3 py-1 rounded-full border border-cyan-500/30 mb-2">
+                      <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                      خطة التفوق الذكية قبل الاختبارات
+                    </div>
+                    <h3 className="text-lg font-black text-white">{currentActiveProfile.aiRevisionPlan.title}</h3>
+                    <p className="text-xs text-blue-200/80 mt-1 leading-relaxed">{currentActiveProfile.aiRevisionPlan.description}</p>
                   </div>
 
-                  <span className="text-[10px] bg-blue-950/80 text-cyan-300 px-2 py-0.5 rounded font-bold shrink-0 border border-blue-800/40">
-                    {task.subject}
-                  </span>
+                  <div className="text-cyan-400 font-black text-lg bg-[#070e24] px-3.5 py-1.5 rounded-xl border border-cyan-500/40 shrink-0">
+                    {completedRevisionCount} / {totalRevisionCount}
+                  </div>
                 </div>
-              ))}
-            </div>
+
+                {/* Progress Bar */}
+                <div className="space-y-1.5 relative z-10">
+                  <div className="flex justify-between text-xs font-bold text-slate-300">
+                    <span>نسبة إنجاز الخطة</span>
+                    <span className="text-cyan-300 font-extrabold">{revisionProgressPct}%</span>
+                  </div>
+                  <div className="w-full bg-[#070e24] rounded-full h-2.5 overflow-hidden border border-blue-900/40">
+                    <div
+                      className="bg-gradient-to-r from-cyan-400 to-purple-500 h-2.5 rounded-full transition-all duration-500"
+                      style={{ width: `${revisionProgressPct}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Checklist items */}
+                <div className="space-y-2.5 pt-1 relative z-10">
+                  {currentActiveProfile.aiRevisionPlan.tasks.map((task) => (
+                    <div
+                      key={task.day}
+                      onClick={() => onUpdateRevisionTask(task.day, !task.completed)}
+                      className={`p-3.5 rounded-2xl border transition cursor-pointer flex items-center justify-between ${
+                        task.completed
+                          ? 'bg-[#081024]/80 text-slate-400 border-slate-800 line-through'
+                          : 'bg-[#0a132c] text-slate-100 border-blue-900/50 hover:border-cyan-400/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        {task.completed ? (
+                          <CheckSquare className="w-5 h-5 text-cyan-400 shrink-0" />
+                        ) : (
+                          <Square className="w-5 h-5 text-slate-500 shrink-0" />
+                        )}
+                        <span className="text-xs font-medium">
+                          اليوم {task.day}: {task.title}
+                        </span>
+                      </div>
+
+                      <span className="text-[10px] bg-blue-950/80 text-cyan-300 px-2 py-0.5 rounded font-bold shrink-0 border border-blue-800/40">
+                        {task.subject}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-6 space-y-2 relative z-10">
+                <Sparkles className="w-8 h-8 text-cyan-400 mx-auto opacity-70" />
+                <h3 className="text-sm font-bold text-white">خطة المراجعة الذكية</h3>
+                <p className="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+                  لا توجد خطة مراجعة مجدولة حالياً. يمكنك توليد خطة مراجعة مخصصة عبر المعلم الذكي.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Academic Performance / Mastery Overview */}
@@ -1195,51 +1387,61 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
 
             <div className="space-y-3">
-              {currentActiveProfile.subjectsPerformance.map((sub, idx) => (
-                <div key={idx} className="space-y-1.5 bg-[#080e22] p-3.5 rounded-2xl border border-blue-900/30 hover:border-cyan-500/30 transition">
-                  <div className="flex items-center justify-between text-xs font-bold text-slate-200">
-                    <span className="flex items-center gap-2">
-                      <span className="w-2 h-2 rounded-full bg-cyan-400" />
-                      <span>{sub.subject}</span>
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-slate-400 font-normal">
-                        واجبات: {sub.homeworkCompleted || 0}/{sub.totalHomework}
+              {currentActiveProfile.subjectsPerformance && currentActiveProfile.subjectsPerformance.length > 0 ? (
+                currentActiveProfile.subjectsPerformance.map((sub, idx) => (
+                  <div key={idx} className="space-y-1.5 bg-[#080e22] p-3.5 rounded-2xl border border-blue-900/30 hover:border-cyan-500/30 transition">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-200">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                        <span>{sub.subject}</span>
                       </span>
-                      <span className="text-cyan-400 font-extrabold">{sub.scorePercentage}% ({sub.gradeLetter})</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-slate-400 font-normal">
+                          واجبات: {sub.homeworkCompleted || 0}/{sub.totalHomework}
+                        </span>
+                        <span className="text-cyan-400 font-extrabold">{sub.scorePercentage}% ({sub.gradeLetter})</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-[#060b18] rounded-full h-2 overflow-hidden border border-blue-950">
+                      <div
+                        className="bg-gradient-to-r from-blue-500 via-cyan-400 to-purple-500 h-2 rounded-full transition-all duration-500"
+                        style={{ width: `${sub.scorePercentage}%` }}
+                      />
                     </div>
                   </div>
-                  <div className="w-full bg-[#060b18] rounded-full h-2 overflow-hidden border border-blue-950">
-                    <div
-                      className="bg-gradient-to-r from-blue-500 via-cyan-400 to-purple-500 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${sub.scorePercentage}%` }}
-                    />
-                  </div>
+                ))
+              ) : (
+                <div className="text-center py-6 text-slate-400 text-xs bg-[#080e22] rounded-2xl border border-blue-900/20 p-4">
+                  لا توجد تقييمات دراسية مرصودة حتى الآن. يتم تحديث السجل تلقائياً فور رصد المعلمين للواجبات والاختبارات.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
       </section>
+    </ScrollFadeIn>
 
       {/* SECTION: إنجازاتي - DIGITAL ACHIEVEMENTS PORTFOLIO */}
-      <section id="student-achievements-portfolio-section" className="space-y-6 pt-4">
-        <AchievementsPortfolioView
-          currentUser={
-            currentUser || {
-              id: profile.id || 'student_guest',
-              name: realStudentName,
-              role: 'student',
-              email: ''
+      <ScrollFadeIn threshold={0.06}>
+        <section id="student-achievements-portfolio-section" className="space-y-6 pt-4">
+          <AchievementsPortfolioView
+            currentUser={
+              currentUser || {
+                id: profile.id || 'student_guest',
+                name: realStudentName,
+                role: 'student',
+                email: ''
+              }
             }
-          }
-          currentSchool={currentSchool}
-          defaultTab="my"
-        />
-      </section>
+            currentSchool={currentSchool}
+            defaultTab="my"
+          />
+        </section>
+      </ScrollFadeIn>
 
       {/* 6. HELP & SUPPORT CENTER (مركز المساعدة والدعم الذكي) */}
-      <section className="bg-gradient-to-br from-[#0b1530] via-[#080f24] to-[#050a18] border border-blue-800/30 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+      <ScrollFadeIn threshold={0.06}>
+        <section className="bg-gradient-to-br from-[#0b1530] via-[#080f24] to-[#050a18] border border-blue-800/30 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-blue-900/30 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
@@ -1300,6 +1502,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           })}
         </div>
       </section>
+    </ScrollFadeIn>
 
       {/* QUIZ INTERACTIVE MODAL */}
       {activeQuiz && (

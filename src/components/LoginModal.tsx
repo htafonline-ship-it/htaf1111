@@ -621,7 +621,7 @@ export const LoginModal: React.FC<LoginModalProps> = ({
         email: cleanEmail,
         password: cleanPass,
         role: regRole,
-        schoolId: regSchoolId || (schools && schools.length > 0 ? schools[0].id : 'al-namouthajya'),
+        schoolId: regSchoolId || (schools && schools.length > 0 ? schools[0].id : ''),
         phoneNumber: regPhone.trim() || undefined
       });
 
@@ -1110,11 +1110,11 @@ export const LoginModal: React.FC<LoginModalProps> = ({
                     {schools && schools.length > 0 ? (
                       schools.map((s) => (
                         <option key={s.id} value={s.id}>
-                          {s.name} ({s.location || 'الخرج'})
+                          {s.name} ({s.location || 'المملكة العربية السعودية'})
                         </option>
                       ))
                     ) : (
-                      <option value="al-namouthajya">ثانوية النموذجية الأهلية بالخرج</option>
+                      <option value="">-- يرجى تسجيل المدرسة أولاً --</option>
                     )}
                   </select>
                 </div>

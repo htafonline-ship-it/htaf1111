@@ -90,6 +90,7 @@ import { getDynamicBlocksForPage } from './lib/dynamicPagesService';
 import { AboutAppModal } from './pwa/AboutAppModal';
 import { PWAOfflineNotice } from './pwa/PWAOfflineNotice';
 import { PWAUpdateModal } from './pwa/PWAUpdateModal';
+import { InteractiveScrollNavigator } from './components/InteractiveScrollNavigator';
 
 export default function App() {
   // Authentication State - Defaults to null (Production Auth via Google / Supabase)
@@ -348,7 +349,7 @@ export default function App() {
       } else {
         // User is authenticated via Google/Supabase, connect them directly and seamlessly
         const autoSchool = currentSchool || (schools.length > 0 ? schools[0] : null);
-        const autoSchoolId = autoSchool?.id || 'al-namouthajya';
+        const autoSchoolId = autoSchool?.id || '';
         const userRole = (profile?.role as UserRole) || 'student';
 
         const autoLink: SupabaseSchoolUserLink = {
@@ -412,7 +413,7 @@ export default function App() {
       const saved = localStorage.getItem('htaf_student_profile');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed && parsed.name && parsed.name !== 'سارة عبد الله العاصمي') {
+        if (parsed && parsed.name) {
           setStudentProfile(prev => ({ ...prev, ...parsed }));
         }
       }
@@ -601,7 +602,34 @@ export default function App() {
   };
 
   // App Data States
-  const [studentProfile, setStudentProfile] = useState<StudentProfile>(INITIAL_STUDENT_PROFILE);
+  const [studentProfile, setStudentProfile] = useState<StudentProfile>(() => {
+    try {
+      const saved = localStorage.getItem('htaf_student_profile');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return { ...INITIAL_STUDENT_PROFILE, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load initial student profile from localStorage', e);
+    }
+    return INITIAL_STUDENT_PROFILE;
+  });
+
+  // Listen to profile updates dispatched anywhere in the app
+  useEffect(() => {
+    const handleProfileUpdateEvent = (evt: any) => {
+      if (evt.detail) {
+        setStudentProfile((prev) => ({ ...prev, ...evt.detail }));
+      }
+    };
+    window.addEventListener('htaf_student_profile_updated', handleProfileUpdateEvent);
+    return () => {
+      window.removeEventListener('htaf_student_profile_updated', handleProfileUpdateEvent);
+    };
+  }, []);
+
   const [homeworks, setHomeworks] = useState<HomeworkAssignment[]>(INITIAL_HOMEWORKS);
   const [quizzes, setQuizzes] = useState<QuizItem[]>(INITIAL_QUIZZES);
   const [referrals, setReferrals] = useState<CounselingReferral[]>(INITIAL_REFERRALS);
@@ -840,7 +868,10 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50/90 via-fuchsia-50/40 to-pink-50/60 text-slate-900 font-['Cairo',sans-serif] flex">
+    <div className="min-h-screen bg-[#070c1b] text-slate-100 font-['Cairo',sans-serif] flex w-full relative">
+      {/* Interactive Scroll & Progress Navigator (تحكم تفاعلي بالنزول والطلوع) */}
+      <InteractiveScrollNavigator />
+
       {/* Security Toast Alert Popup */}
       {securityToastMessage && (
         <SecurityToast
@@ -1079,10 +1110,22 @@ export default function App() {
             {activeTab === 'curriculum' && (
               <CurriculumLibraryView
                 centralBooks={centralBooks}
+                onAddBook={handleAddBook}
                 currentUser={currentUser}
                 currentRole={currentRole}
                 currentSchool={currentSchool}
                 studentProfile={studentProfile}
+                onUpdateStudentProfile={(updated) => {
+                  setStudentProfile(updated);
+                  try {
+                    localStorage.setItem('htaf_student_profile', JSON.stringify(updated));
+                  } catch (e) {
+                    console.warn('Failed to persist student profile', e);
+                  }
+                }}
+                onNavigateToDashboard={() => {
+                  handleSetActiveTabGuard('dashboard');
+                }}
                 onSelectTopicForSolver={handleSelectTopicForSolver}
                 onSelectTopicForTeacher={handleSelectTopicForTeacher}
                 onOpenHomeworkCreator={(lessonTitle, subject, grade, pageStart) => {
