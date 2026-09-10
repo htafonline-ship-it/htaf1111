@@ -55,7 +55,6 @@ import { Sidebar } from './components/Sidebar';
 import { TopHeader } from './components/TopHeader';
 import { LoginModal } from './components/LoginModal';
 import { SchoolRegistrationModal } from './components/SchoolRegistrationModal';
-import { SupabaseConfigModal } from './components/SupabaseConfigModal';
 import { CreateSchoolView } from './components/CreateSchoolView';
 import { ManualAddSchoolModal } from './components/ManualAddSchoolModal';
 import { EditSchoolModal } from './components/EditSchoolModal';
@@ -105,7 +104,6 @@ export default function App() {
     setLoginModalMode(mode);
     setIsLoginModalOpen(true);
   };
-  const [isSupabaseConfigOpen, setIsSupabaseConfigOpen] = useState<boolean>(false);
   const [isCreateSchoolOpen, setIsCreateSchoolOpen] = useState<boolean>(false);
   const [isManualAddSchoolOpen, setIsManualAddSchoolOpen] = useState<boolean>(false);
   const [isEditSchoolOpen, setIsEditSchoolOpen] = useState<boolean>(false);
@@ -347,23 +345,11 @@ export default function App() {
         setCurrentRole('platform_admin');
         setActiveTab('platform-admin');
       } else {
-        // User is authenticated via Google/Supabase, connect them directly and seamlessly
-        const autoSchool = currentSchool || (schools.length > 0 ? schools[0] : null);
-        const autoSchoolId = autoSchool?.id || '';
+        // User is authenticated but NOT linked to any school yet, and is NOT a platform admin
+        // Do not assign default schools or create fake links
+        setUserSchoolLink(null);
+        setCurrentSchool(null);
         const userRole = (profile?.role as UserRole) || 'student';
-
-        const autoLink: SupabaseSchoolUserLink = {
-          id: `link-auto-${sessionUser.id}`,
-          school_id: autoSchoolId,
-          user_id: sessionUser.id,
-          role: userRole,
-          status: 'active',
-          full_name: profile?.full_name || name,
-          email: email,
-          created_at: new Date().toISOString()
-        };
-        setUserSchoolLink(autoLink);
-        setCurrentRole(userRole);
 
         const authUsr: AuthUser = {
           id: sessionUser.id,
@@ -371,13 +357,14 @@ export default function App() {
           fullName: profile?.full_name || name,
           email,
           role: userRole,
-          schoolId: autoSchoolId,
+          schoolId: undefined,
           accountStatus: 'active',
           avatarUrl: profile?.avatar_url || sessionUser.user_metadata?.avatar_url,
           loginMethod: 'google',
-          badge: userRole === 'teacher' ? 'حساب معلم معتمد' : 'حساب Google معتمد'
+          badge: 'حساب غير مرتبط بمدرسة'
         };
         setCurrentUser(authUsr);
+        setCurrentRole(userRole);
 
         setStudentProfile(prev => ({
           ...prev,
@@ -386,17 +373,7 @@ export default function App() {
           avatar: userRole === 'teacher' ? '👩‍🏫' : '🧑‍🎓',
         }));
 
-        if (userRole === 'teacher') {
-          setActiveTab('teacher-portal');
-        } else if (userRole === 'parent') {
-          setActiveTab('parent-portal');
-        } else if (userRole === 'principal' || userRole === 'school_admin') {
-          setActiveTab('school-mgmt');
-        } else if (userRole === 'counselor') {
-          setActiveTab('counselor-portal');
-        } else {
-          setActiveTab('dashboard');
-        }
+        setActiveTab('unlinked-user');
       }
     } catch (err) {
       console.error('Error syncing auth session:', err);
@@ -497,7 +474,7 @@ export default function App() {
       avatar: user.avatarUrl ? undefined : (user.role === 'platform_admin' ? '👑' : '🧑‍🎓')
     }));
 
-    if (user.id && !user.id.startsWith('usr-admin-') && !user.id.startsWith('usr-local-') && supabase) {
+    if (user.id && supabase) {
       syncUserAuthWithSupabase({ id: user.id, email: user.email, user_metadata: { full_name: user.fullName, avatar_url: user.avatarUrl } });
     }
   };
@@ -1035,6 +1012,24 @@ export default function App() {
               />
             </div>
 
+            {currentUser && currentRole !== 'platform_admin' && currentRole !== 'super_admin' && (!currentSchool || !userSchoolLink?.school_id || activeTab === 'unlinked-user') ? (
+              <div className="max-w-4xl mx-auto px-4 py-8">
+                <UnlinkedUserGate
+                  currentUser={currentUser}
+                  schools={schools}
+                  onCreateSchoolClick={() => setIsCreateSchoolOpen(true)}
+                  onOpenCreateSchool={() => setIsCreateSchoolOpen(true)}
+                  onSchoolJoinedSuccess={async () => {
+                    if (supabase) {
+                      const { data: { user } } = await supabase.auth.getUser();
+                      if (user) await syncUserAuthWithSupabase(user);
+                    }
+                  }}
+                  onLogout={handleLogout}
+                />
+              </div>
+            ) : (
+              <>
             {(activeTab === 'super_admin' || activeTab === 'platform-admin') && (
               <SuperAdminView
                 schools={schools}
@@ -1311,6 +1306,8 @@ export default function App() {
                   />
                 )}
               </div>
+            )}
+            </>
             )}
 
             {/* Bottom Dynamic Sections (Admin Configurable) */}

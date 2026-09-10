@@ -2,7 +2,7 @@ export type UserRole = 'student' | 'teacher' | 'parent' | 'counselor' | 'vice_pr
 
 export interface AuthUser {
   id: string;
-  username: string; // e.g. 'student.demo1' or 'teacher.demo1'
+  username: string;
   fullName: string;
   email?: string;
   role: UserRole;
@@ -13,8 +13,6 @@ export interface AuthUser {
   classId?: string;
   gradeId?: string;
   accountStatus?: 'active' | 'pending' | 'suspended';
-  isDemoAccount?: boolean;
-  demoExpiresAt?: string;
   nationalId?: string;
   badge?: string;
   phoneNumber?: string;
@@ -68,25 +66,10 @@ export interface UserProfile {
   customFields?: CustomFieldDefinition[];
   customValues?: Record<string, any>;
   accountStatus: 'active' | 'pending' | 'suspended';
-  isDemoAccount: boolean;
-  demoExpiresAt?: string;
   avatarUrl?: string;
   lastLoginAt?: string;
   createdAt: string;
   updatedAt?: string;
-}
-
-export interface DemoAccountCreatePayload {
-  fullName: string;
-  username: string;
-  email: string;
-  temporaryPassword?: string;
-  role: UserRole;
-  schoolId: string;
-  gradeId?: string;
-  classId?: string;
-  expiresAt: string;
-  permissions?: string[];
 }
 
 export type StudyRoomType = 'فصل' | 'مادة' | 'مراجعة اختبار' | 'دعم دراسي' | 'موهوبين' | 'برمجة وابتكار';

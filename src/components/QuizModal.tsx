@@ -796,12 +796,12 @@ export const QuizModal: React.FC<QuizModalProps> = ({
       let baseProfile: StudentProfile = studentProfile
         ? { ...studentProfile }
         : {
-            id: 'student-demo-1',
+            id: 'student-current',
             name: 'طالب مسجل',
             grade: book.grade || 'الصف الثالث المتوسط',
             stage: book.stage || 'middle',
             avatar: '🧑‍🎓',
-            schoolSlug: 'al-namouthajya',
+            schoolSlug: '',
             screenTimeDailyLimitMinutes: 90,
             screenTimeUsedTodayMinutes: 45,
             aiQuestionsCountToday: 8,

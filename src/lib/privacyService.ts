@@ -55,7 +55,7 @@ const SYSTEM_ERROR_LOGS_KEY = 'htaf_system_error_logs';
 
 /**
  * Mask National Identification Number (الهوية الوطنية / الإقامة)
- * Example: 1007363904 -> 100****904
+ * Example: 1012345678 -> 101****678
  */
 export function maskNationalId(id?: string | null): string {
   if (!id) return 'غير متوفر';

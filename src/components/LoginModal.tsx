@@ -394,19 +394,14 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setIsLoading(true);
 
     try {
-      const cleanLower = cleanEmail.toLowerCase();
-      if (
-        cleanLower === '1007363904' ||
-        cleanLower === 'htaf.online@gmail.com' ||
-        cleanLower === 'admin'
-      ) {
-        const { authUser } = await signInWithUsernameOrEmail(cleanLower, cleanPass);
-        onLoginSuccess(authUser);
-        onClose();
-        return;
+      let authUser: any = null;
+      try {
+        const res = await signInWithUsernameOrEmail(cleanEmail, cleanPass);
+        authUser = res.authUser;
+      } catch {
+        authUser = await signInWithFirebaseEmailPassword(cleanEmail, cleanPass);
       }
 
-      const authUser = await signInWithFirebaseEmailPassword(cleanEmail, cleanPass);
       if (is2FAEnabledForUser(authUser)) {
         initiate2FAForUser(authUser);
         return;
@@ -444,25 +439,6 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     try {
       const { authUser } = await signInWithUsernameOrEmail(cleanUser, cleanPass);
       if (authUser) {
-        // Direct entry for Super Admin root credentials without blocking
-        const userLower = cleanUser.toLowerCase();
-        const isSuper =
-          userLower === '1007363904' ||
-          userLower.includes('1007363904') ||
-          userLower === 'htaf.online@gmail.com' ||
-          userLower === 'admin' ||
-          userLower === 'superadmin' ||
-          cleanPass === '39213' ||
-          normPass === '39213' ||
-          authUser.role === 'platform_admin' ||
-          authUser.role === 'super_admin';
-
-        if (isSuper) {
-          onLoginSuccess(authUser);
-          onClose();
-          return;
-        }
-
         if (is2FAEnabledForUser(authUser)) {
           initiate2FAForUser(authUser);
           return;

@@ -21,37 +21,23 @@ import {
   AuthUser
 } from '../types';
 
-// Retrieve Supabase credentials from Environment or LocalStorage fallback settings
-const getSupabaseCredentials = () => {
-  const meta = import.meta as any;
-  const envUrl = meta.env?.VITE_SUPABASE_URL || meta.env?.SUPABASE_URL || '';
-  const envKey = meta.env?.VITE_SUPABASE_ANON_KEY || meta.env?.SUPABASE_ANON_KEY || '';
+// Supabase credentials strictly from Environment Variables with Hostinger production reference
+const DEFAULT_SUPABASE_URL = 'https://gmnzyurlstuqlehbnupx.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imdtbnp5dXJsc3R1cWxlaGJudXB4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3MTMyOTcsImV4cCI6MjEwNDI4OTI5N30.lq43jmlcW2ZYP6RGOaRyy0dor6RPcyflKiNBVvz10QU';
 
-  const savedUrl = localStorage.getItem('CUSTOM_SUPABASE_URL') || '';
-  const savedKey = localStorage.getItem('CUSTOM_SUPABASE_ANON_KEY') || '';
+const envUrl = import.meta.env.VITE_SUPABASE_URL;
+const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-  // Project URL detected from user's Supabase project configuration
-  const defaultProjectUrl = 'https://dadrrpvehryirvuckftd.supabase.co';
-
-  return {
-    supabaseUrl: envUrl || savedUrl || defaultProjectUrl,
-    supabaseAnonKey: envKey || savedKey,
-  };
-};
-
-const credentials = getSupabaseCredentials();
+export const supabaseUrl = (typeof envUrl === 'string' && envUrl.trim()) ? envUrl.trim() : DEFAULT_SUPABASE_URL;
+export const supabaseAnonKey = (typeof envAnonKey === 'string' && envAnonKey.trim()) ? envAnonKey.trim() : DEFAULT_SUPABASE_ANON_KEY;
 
 export const isSupabaseConfigured = Boolean(
-  credentials.supabaseUrl && credentials.supabaseAnonKey
+  supabaseUrl && supabaseAnonKey
 );
 
-// Fallback dummy values to prevent crash on initialization if keys aren't added yet
-const dummyUrl = 'https://placeholder.supabase.co';
-const dummyKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder';
-
 export const supabase: SupabaseClient = createClient(
-  credentials.supabaseUrl || dummyUrl,
-  credentials.supabaseAnonKey || dummyKey,
+  supabaseUrl,
+  supabaseAnonKey,
   {
     auth: {
       persistSession: true,
@@ -60,13 +46,6 @@ export const supabase: SupabaseClient = createClient(
     },
   }
 );
-
-// Helper to update Supabase custom credentials if user enters them in UI settings
-export function updateSupabaseConfig(url: string, key: string) {
-  localStorage.setItem('CUSTOM_SUPABASE_URL', url.trim());
-  localStorage.setItem('CUSTOM_SUPABASE_ANON_KEY', key.trim());
-  window.location.reload();
-}
 
 // -------------------------------------------------------------
 // SUPABASE AUTH HELPERS
@@ -144,7 +123,7 @@ export interface DbProfile {
   class_id?: string;
   grade_id?: string;
   account_status: 'active' | 'pending' | 'suspended';
-  is_demo_account: boolean;
+  is_demo_account?: boolean;
   demo_expires_at?: string;
   avatar_url?: string;
   last_login_at?: string;
@@ -270,204 +249,80 @@ export function normalizeAuthInput(val: string): string {
 }
 
 /**
- * Sign in using Username or Email with safe resolution against Supabase Auth.
- * Supports domains like @htaf.online, quick demo accounts, and super admin login.
+ * Sign in using Username or Email with authentic Supabase Auth.
  */
 export async function signInWithUsernameOrEmail(
   identifier: string,
   pass: string
-): Promise<{ authUser: any; rawUser: any }> {
+): Promise<{ authUser: AuthUser; rawUser?: any }> {
   const clean = identifier ? identifier.trim() : '';
-  const normId = normalizeAuthInput(identifier).toLowerCase();
-  const normPass = normalizeAuthInput(pass);
   const rawPass = pass ? pass.trim() : '';
 
-  if (!clean && !normId) throw new Error('يرجى إدخال اسم المستخدم أو البريد الإلكتروني.');
-  if (!pass && !normPass) throw new Error('يرجى إدخال كلمة المرور.');
+  if (!clean) throw new Error('يرجى إدخال اسم المستخدم أو البريد الإلكتروني.');
+  if (!rawPass) throw new Error('يرجى إدخال كلمة المرور.');
 
-  const cleanLower = clean.toLowerCase();
-
-  // 1. Check for Platform Super Admin credentials (1007363904 / 39213)
-  const isSuperAdmin =
-    normId === '1007363904' ||
-    normId.includes('1007363904') ||
-    cleanLower === '1007363904' ||
-    cleanLower.includes('1007363904') ||
-    normId === 'admin' ||
-    cleanLower === 'admin' ||
-    normId === 'superadmin' ||
-    cleanLower === 'superadmin' ||
-    normId === 'htaf.online@gmail.com' ||
-    cleanLower === 'htaf.online@gmail.com' ||
-    normPass === '39213' ||
-    rawPass === '39213' ||
-    normPass.includes('39213') ||
-    rawPass.includes('39213') ||
-    normId === '39213';
-
-  if (isSuperAdmin) {
-    return {
-      authUser: {
-        id: 'usr-admin-1007363904',
-        username: '1007363904',
-        fullName: 'مدير المنصة الرئيسي (Super Admin)',
-        email: 'htaf.online@gmail.com',
-        role: 'platform_admin',
-        schoolId: undefined,
-        accountStatus: 'active',
-        isDemoAccount: false,
-        loginMethod: 'credentials',
-        badge: 'مدير المنصة الرئيسي (Super Admin)'
-      },
-      rawUser: { id: 'usr-admin-1007363904', email: 'htaf.online@gmail.com' }
-    };
+  if (!isSupabaseConfigured) {
+    throw new Error('خدمة Supabase غير مهيأة. يرجى التحقق من متغيرات البيئة.');
   }
 
-  // 2. Check locally registered users in localStorage (offline/resilient registration)
-  try {
-    const localAccountsStr = localStorage.getItem('htaf_registered_users');
-    if (localAccountsStr) {
-      const localAccounts = JSON.parse(localAccountsStr);
-      const found = localAccounts.find((u: any) =>
-        (u.username?.toLowerCase() === cleanLower || u.email?.toLowerCase() === cleanLower) &&
-        (!u.password || u.password === pass)
-      );
-      if (found) {
-        return {
-          authUser: {
-            id: found.id,
-            username: found.username,
-            fullName: found.fullName,
-            email: found.email,
-            role: found.role,
-            schoolId: found.schoolId,
-            gradeId: found.gradeId,
-            classId: found.classId,
-            accountStatus: 'active',
-            isDemoAccount: false,
-            loginMethod: 'credentials',
-            badge: 'حساب مسجل معتمد'
-          },
-          rawUser: { id: found.id, email: found.email }
-        };
-      }
-    }
-  } catch (err) {
-    console.warn('Error reading local registered users:', err);
-  }
+  let targetEmail = clean.toLowerCase();
 
-  // 4. If Supabase is configured, attempt real authentication
-  if (isSupabaseConfigured) {
-    let targetEmail = clean.toLowerCase();
-
-    // Look up in profiles table if username given without @
-    if (!clean.includes('@')) {
-      const profile = await fetchUserProfileByUsername(clean);
-      if (profile && profile.email) {
-        targetEmail = profile.email;
-      } else {
-        targetEmail = `${clean.toLowerCase()}@htaf.online`;
-      }
-    }
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: targetEmail,
-        password: pass,
-      });
-
-      if (!error && data?.user) {
-        const authUser = data.user;
-        let profile = await fetchUserProfile(authUser.id);
-
-        if (!profile) {
-          const derivedUsername = authUser.user_metadata?.username || (targetEmail ? targetEmail.split('@')[0] : '') || (authUser.id ? `user_${authUser.id.slice(0, 6)}` : 'user_guest');
-          const fullName = authUser.user_metadata?.full_name || derivedUsername;
-          const role = authUser.user_metadata?.role || 'student';
-          const isDemo = Boolean(authUser.user_metadata?.is_demo_account);
-
-          profile = await upsertUserProfile({
-            id: authUser.id,
-            full_name: fullName,
-            username: derivedUsername,
-            email: targetEmail,
-            role,
-            is_demo_account: isDemo,
-            account_status: 'active'
-          });
-        }
-
-        if (profile?.account_status === 'suspended') {
-          await signOutSupabase();
-          throw new Error('تم تعطيل هذا الحساب من قبل إدارة المنصة. يرجى التواصل مع الدعم الفني.');
-        }
-
-        if (profile?.is_demo_account && profile.demo_expires_at) {
-          const expiry = new Date(profile.demo_expires_at);
-          if (expiry.getTime() < Date.now()) {
-            await signOutSupabase();
-            throw new Error('انتهت فترة صلاحية هذا الحساب التجريبي. يرجى التواصل مع إدارة المنصة لتمديد الصلاحية.');
-          }
-        }
-
-        if (profile?.id) {
-          supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', profile.id).then();
-        }
-
-        return {
-          authUser: {
-            id: authUser.id,
-            username: profile?.username || targetEmail.split('@')[0],
-            fullName: profile?.full_name || authUser.user_metadata?.full_name || targetEmail.split('@')[0],
-            email: targetEmail,
-            role: (profile?.role || authUser.user_metadata?.role || 'student'),
-            schoolId: profile?.school_id,
-            classId: profile?.class_id,
-            gradeId: profile?.grade_id,
-            accountStatus: profile?.account_status || 'active',
-            isDemoAccount: profile?.is_demo_account || false,
-            demoExpiresAt: profile?.demo_expires_at,
-            loginMethod: 'credentials',
-            badge: 'حساب موثق بـ Supabase'
-          },
-          rawUser: authUser
-        };
-      }
-    } catch (authErr: any) {
-      console.warn('Supabase Auth error:', authErr);
-      if (authErr?.message && !authErr.message.includes('FetchError') && !authErr.message.includes('NetworkError')) {
-        // If it's a specific auth error from Supabase and not a network issue, we can inspect or fall back
-      }
+  // If username given without @, look up user email from profiles table
+  if (!clean.includes('@')) {
+    const profile = await fetchUserProfileByUsername(clean);
+    if (profile && profile.email) {
+      targetEmail = profile.email;
+    } else {
+      targetEmail = `${clean.toLowerCase()}@htaf.online`;
     }
   }
 
-  // 4. Standalone / Preview Fallback Authentication
-  // Derive role gracefully from identifier or provide instant access
-  let derivedRole: UserRole = 'student';
-  if (cleanLower.includes('teacher') || cleanLower.includes('معلم')) derivedRole = 'teacher';
-  else if (cleanLower.includes('parent') || cleanLower.includes('ولي')) derivedRole = 'parent';
-  else if (cleanLower.includes('counselor') || cleanLower.includes('مرشد') || cleanLower.includes('موجه')) derivedRole = 'counselor';
-  else if (cleanLower.includes('principal') || cleanLower.includes('مدير') || cleanLower.includes('admin')) derivedRole = 'school_admin';
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: targetEmail,
+    password: rawPass,
+  });
 
-  const userDisplayName = clean.includes('@') ? clean.split('@')[0] : clean;
+  if (error || !data?.user) {
+    throw new Error(error?.message || 'بيانات الدخول غير صحيحة. يرجى التحقق من اسم المستخدم وكلمة المرور.');
+  }
+
+  const authUser = data.user;
+  const profile = await fetchUserProfile(authUser.id);
+
+  if (profile?.account_status === 'suspended') {
+    await signOutSupabase();
+    throw new Error('تم تعطيل هذا الحساب من قبل إدارة المنصة. يرجى التواصل مع إدارة مدرستك.');
+  }
+
+  // Fetch school link for this user
+  const link = await getSupabaseUserSchoolLink(authUser.id, targetEmail);
+  if (link && (link.status === 'suspended' || link.status === 'inactive')) {
+    await signOutSupabase();
+    throw new Error('تم إيقاف صلاحية هذا الحساب في المدرسة.');
+  }
+
+  const verifiedRole: UserRole = (profile?.role || link?.role || 'student') as UserRole;
+  const isPlatformAdmin = verifiedRole === 'super_admin' || verifiedRole === 'platform_admin';
+
+  if (profile?.id) {
+    supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', profile.id).then();
+  }
 
   return {
     authUser: {
-      id: `usr-local-${clean.replace(/[^a-zA-Z0-9]/g, '') || Date.now()}`,
-      username: clean,
-      fullName: userDisplayName,
-      email: clean.includes('@') ? clean : `${clean}@htaf.online`,
-      role: derivedRole,
-      schoolId: undefined,
-      classId: undefined,
-      gradeId: undefined,
-      accountStatus: 'active',
-      isDemoAccount: true,
-      demoExpiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString(),
+      id: authUser.id,
+      username: profile?.username || targetEmail.split('@')[0],
+      fullName: profile?.full_name || authUser.user_metadata?.full_name || targetEmail.split('@')[0],
+      email: targetEmail,
+      role: isPlatformAdmin ? 'platform_admin' : verifiedRole,
+      schoolId: link?.school_id || profile?.school_id,
+      classId: profile?.class_id,
+      gradeId: profile?.grade_id,
+      accountStatus: profile?.account_status || 'active',
       loginMethod: 'credentials',
-      badge: 'جلسة معاينة نشطة'
+      badge: isPlatformAdmin ? 'مدير المنصة الرئيسي (Super Admin)' : undefined
     },
-    rawUser: { id: `usr-local-${clean}`, email: clean }
+    rawUser: authUser
   };
 }
 
@@ -500,235 +355,84 @@ export async function registerNewUser(payload: RegisterNewUserPayload): Promise<
   if (!cleanEmail || !cleanEmail.includes('@')) throw new Error('يرجى إدخال بريد إلكتروني صحيح.');
   if (cleanPass.length < 6) throw new Error('يجب أن لا تقل كلمة المرور عن 6 أحرف أو أرقام.');
 
-  let userId = `usr-reg-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-
-  if (isSupabaseConfigured) {
-    try {
-      // 1. Sign up with Supabase Auth
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: cleanPass,
-        options: {
-          data: {
-            full_name: cleanFullName,
-            username: cleanUsername,
-            role: payload.role,
-            school_id: payload.schoolId || '',
-            phone: payload.phoneNumber
-          }
-        }
-      });
-
-      if (authData?.user?.id) {
-        userId = authData.user.id;
-      }
-
-      // 2. Insert/Upsert into profiles
-      const profileData: DbProfile = {
-        id: userId,
-        full_name: cleanFullName,
-        username: cleanUsername,
-        email: cleanEmail,
-        role: payload.role,
-        school_id: payload.schoolId || '',
-        grade_id: payload.gradeId,
-        class_id: payload.classId,
-        account_status: 'active',
-        is_demo_account: false,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
-
-      // 3. Link to school_users if schoolId
-      if (payload.schoolId) {
-        await supabase.from('school_users').upsert({
-          school_id: payload.schoolId,
-          user_id: userId,
-          email: cleanEmail,
-          full_name: cleanFullName,
-          role: payload.role,
-          status: 'active',
-          created_at: new Date().toISOString()
-        }, { onConflict: 'school_id,user_id' });
-      }
-    } catch (sbErr: any) {
-      console.warn('Supabase profile creation exception during registration:', sbErr);
-    }
+  if (!isSupabaseConfigured) {
+    throw new Error('خدمة Supabase غير مهيأة. يرجى التحقق من متغيرات البيئة.');
   }
 
-  // Authorize User Model
+  // 1. Sign up with Supabase Auth
+  const { data: authData, error: authErr } = await supabase.auth.signUp({
+    email: cleanEmail,
+    password: cleanPass,
+    options: {
+      data: {
+        full_name: cleanFullName,
+        username: cleanUsername,
+        role: payload.role,
+        school_id: payload.schoolId || '',
+        phone: payload.phoneNumber
+      }
+    }
+  });
+
+  if (authErr) {
+    throw new Error(authErr.message || 'فشل تسجيل الحساب في Supabase.');
+  }
+
+  const userId = authData?.user?.id;
+  if (!userId) {
+    throw new Error('تعذر إتمام تسجيل المستخدم في Supabase.');
+  }
+
+  // 2. Insert/Upsert into profiles
+  const profileData: DbProfile = {
+    id: userId,
+    full_name: cleanFullName,
+    username: cleanUsername,
+    email: cleanEmail,
+    role: payload.role,
+    school_id: payload.schoolId || '',
+    grade_id: payload.gradeId,
+    class_id: payload.classId,
+    account_status: 'active',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error: profileErr } = await supabase.from('profiles').upsert(profileData, { onConflict: 'id' });
+  if (profileErr) {
+    console.warn('Profile upsert warning:', profileErr.message);
+  }
+
+  // 3. Link to school_users if schoolId provided
+  if (payload.schoolId) {
+    await supabase.from('school_users').upsert({
+      school_id: payload.schoolId,
+      user_id: userId,
+      email: cleanEmail,
+      full_name: cleanFullName,
+      role: payload.role,
+      status: 'active',
+      created_at: new Date().toISOString()
+    }, { onConflict: 'school_id,user_id' });
+  }
+
   const authUser: AuthUser = {
     id: userId,
     username: cleanUsername,
     fullName: cleanFullName,
     email: cleanEmail,
     role: payload.role,
-    schoolId: payload.schoolId || 'al-namouthajya',
+    schoolId: payload.schoolId,
     gradeId: payload.gradeId,
     classId: payload.classId,
     accountStatus: 'active',
-    isDemoAccount: false,
     loginMethod: 'credentials',
     badge: 'حساب مسجل جديد'
   };
 
-  // Save to resilient local storage cache
-  try {
-    const localAccountsStr = localStorage.getItem('htaf_registered_users') || '[]';
-    const localAccounts = JSON.parse(localAccountsStr);
-    // Remove if already exists with same username/email
-    const filtered = localAccounts.filter((u: any) =>
-      u.username !== cleanUsername && u.email !== cleanEmail
-    );
-    filtered.unshift({
-      ...authUser,
-      password: cleanPass
-    });
-    localStorage.setItem('htaf_registered_users', JSON.stringify(filtered.slice(0, 50)));
-    localStorage.setItem(`htaf_user_role_${userId}`, payload.role);
-    localStorage.setItem(`htaf_user_role_${cleanEmail}`, payload.role);
-  } catch (err) {
-    console.warn('LocalStorage save user error:', err);
-  }
-
   return {
     authUser,
-    message: 'تم تسجيل الحساب الجديد وتفعيله بنجاح! مرحباً بك في المنصة.'
-  };
-}
-
-// -------------------------------------------------------------
-// DEMO ACCOUNTS MANAGEMENT (SUPER ADMIN)
-// -------------------------------------------------------------
-
-export async function fetchSupabaseDemoAccounts(schoolId?: string): Promise<DbProfile[]> {
-  if (!isSupabaseConfigured) {
-    return [];
-  }
-
-  try {
-    let query = supabase
-      .from('profiles')
-      .select('*')
-      .eq('is_demo_account', true)
-      .order('created_at', { ascending: false });
-
-    if (schoolId) {
-      query = query.eq('school_id', schoolId);
-    }
-
-    const { data, error } = await query;
-    if (error || !data) {
-      console.warn('Error fetching demo accounts:', error?.message);
-      return [];
-    }
-    return data;
-  } catch (err) {
-    console.warn('Exception fetching demo accounts:', err);
-    return [];
-  }
-}
-
-export async function createRealDemoAccountInSupabase(payload: {
-  fullName: string;
-  username: string;
-  email: string;
-  temporaryPassword?: string;
-  role: string;
-  schoolId: string;
-  gradeId?: string;
-  classId?: string;
-  expiresAt: string;
-}): Promise<{ success: boolean; profile?: DbProfile; message: string }> {
-  const cleanUsername = payload.username.trim().toLowerCase();
-  const cleanEmail = payload.email.trim().toLowerCase() || `${cleanUsername}@htaf.online`;
-  const password = payload.temporaryPassword?.trim() || 'DemoPass2026!';
-
-  if (isSupabaseConfigured) {
-    try {
-      // 1. Create Auth User in Supabase
-      const { data: authData, error: authErr } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password,
-        options: {
-          data: {
-            full_name: payload.fullName,
-            username: cleanUsername,
-            role: payload.role,
-            school_id: payload.schoolId,
-            is_demo_account: true
-          }
-        }
-      });
-
-      const userId = authData?.user?.id || `usr-demo-${Date.now()}`;
-
-      // 2. Insert into profiles table
-      const profileData: DbProfile = {
-        id: userId,
-        full_name: payload.fullName,
-        username: cleanUsername,
-        email: cleanEmail,
-        role: payload.role,
-        school_id: payload.schoolId,
-        grade_id: payload.gradeId,
-        class_id: payload.classId,
-        account_status: 'active',
-        is_demo_account: true,
-        demo_expires_at: payload.expiresAt,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      };
-
-      await supabase.from('profiles').upsert(profileData, { onConflict: 'username' });
-
-      // 3. Link into school_users
-      await supabase.from('school_users').upsert({
-        school_id: payload.schoolId,
-        user_id: userId,
-        email: cleanEmail,
-        full_name: payload.fullName,
-        role: payload.role,
-        status: 'active',
-        created_at: new Date().toISOString()
-      }, { onConflict: 'school_id,user_id' });
-
-      return {
-        success: true,
-        profile: profileData,
-        message: `تم إنشاء حساب التجربة الفعلي (${cleanUsername}) بنجاح في Supabase!`
-      };
-    } catch (err: any) {
-      console.error('Error creating real demo account in Supabase:', err);
-      return {
-        success: false,
-        message: err.message || 'فشل إنشاء الحساب التجريبي في Supabase.'
-      };
-    }
-  }
-
-  // Offline simulated creation
-  const demoProfile: DbProfile = {
-    id: `usr-demo-${Date.now()}`,
-    full_name: payload.fullName,
-    username: cleanUsername,
-    email: cleanEmail,
-    role: payload.role,
-    school_id: payload.schoolId,
-    grade_id: payload.gradeId,
-    class_id: payload.classId,
-    account_status: 'active',
-    is_demo_account: true,
-    demo_expires_at: payload.expiresAt,
-    created_at: new Date().toISOString()
-  };
-
-  return {
-    success: true,
-    profile: demoProfile,
-    message: `تم إنشاء الحساب التجريبي (${cleanUsername}) محلياً.`
+    message: 'تم تسجيل الحساب الجديد بنجاح! مرحباً بك في المنصة.'
   };
 }
 
@@ -751,28 +455,6 @@ export async function toggleUserAccountStatus(
     return !error;
   } catch (err) {
     console.warn('Error toggling account status:', err);
-    return false;
-  }
-}
-
-export async function extendDemoAccountDuration(
-  userId: string,
-  additionalDays: number
-): Promise<boolean> {
-  if (!isSupabaseConfigured) return true;
-  try {
-    const profile = await fetchUserProfile(userId);
-    const currentExpiry = profile?.demo_expires_at ? new Date(profile.demo_expires_at) : new Date();
-    const newExpiry = new Date(Math.max(currentExpiry.getTime(), Date.now()) + additionalDays * 24 * 3600 * 1000).toISOString();
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ demo_expires_at: newExpiry, updated_at: new Date().toISOString() })
-      .eq('id', userId);
-
-    return !error;
-  } catch (err) {
-    console.warn('Error extending demo account duration:', err);
     return false;
   }
 }
@@ -856,8 +538,6 @@ export async function fetchSchoolProfiles(schoolId: string): Promise<UserProfile
       classId: p.class_id,
       gradeId: p.grade_id,
       accountStatus: p.account_status || 'active',
-      isDemoAccount: p.is_demo_account ?? false,
-      demoExpiresAt: p.demo_expires_at,
       avatarUrl: p.avatar_url,
       lastLoginAt: p.last_login_at,
       createdAt: p.created_at,
@@ -1723,7 +1403,7 @@ export async function fetchSupabaseStudentProfile(
       grade: realGrade,
       stage: 'middle',
       avatar: '🧑‍🎓',
-      schoolSlug: schoolId || studentRow?.school_id || 'al-namouthajya',
+      schoolSlug: schoolId || studentRow?.school_id || '',
       screenTimeDailyLimitMinutes: 90,
       screenTimeUsedTodayMinutes: 45,
       aiQuestionsCountToday: 8,
@@ -1848,7 +1528,7 @@ export async function fetchSupabaseStudentHomeworks(
         status: (sub?.status as any) || (h.status as any) || 'pending',
         score: sub?.score !== undefined ? sub.score : h.score,
         feedback: sub?.feedback || h.feedback,
-        schoolSlug: h.school_id || schoolId || 'al-namouthajya',
+        schoolSlug: h.school_id || schoolId || '',
         gradeLevel: h.grade_level || gradeLevel || 'الصف الثالث المتوسط',
         description: h.description || '',
         textbookPage: h.textbook_page ? Number(h.textbook_page) : undefined

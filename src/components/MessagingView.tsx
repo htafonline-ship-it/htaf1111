@@ -1567,7 +1567,7 @@ export const MessagingView: React.FC<MessagingViewProps> = ({
         {/* User & School Metadata Chips */}
         <div className="relative z-10 flex flex-wrap items-center gap-3 pt-2 text-xs text-blue-100">
           <span className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/15 shadow-sm">
-            المدرسة: <strong className="text-white">{currentSchool?.name || 'مدرسة هتاف النموذجية'}</strong>
+            المدرسة: <strong className="text-white">{currentSchool?.name || 'غير مرتبطة بمدرسة'}</strong>
           </span>
           <span className="bg-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/15 shadow-sm">
             الحساب: <strong className="text-white">{effectiveUserName}</strong> ({currentRole === 'student' ? 'طالب' : currentRole === 'teacher' ? 'معلم' : currentRole === 'counselor' ? 'مرشد طلابي' : currentRole === 'parent' ? 'ولي أمر' : 'إدارة'})
