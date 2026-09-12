@@ -25,7 +25,8 @@ export function isCounselorRole(role: UserRole): boolean {
 export function checkTabPermission(
   tab: string,
   role: UserRole,
-  userSchoolLink: SupabaseSchoolUserLink | null
+  userSchoolLink: SupabaseSchoolUserLink | null,
+  user?: { nationalId?: string; username?: string; email?: string; id?: string }
 ): RouteCheckResult {
   const isPlatformAdmin = isPlatformAdminRole(role);
   const isSchoolAdmin = isSchoolAdminRole(role);
@@ -35,9 +36,28 @@ export function checkTabPermission(
     if (!isPlatformAdmin) {
       return {
         allowed: false,
-        reason: 'لوحة الأدمن العام محصورة لمدراء المنصة المعتمدين فقط.',
+        reason: 'لوحة الأدمن العام محصورة لمدير المنصة المعتمد فقط.',
         suggestedTab: 'dashboard'
       };
+    }
+
+    // Strict exclusive admin check: الادمن فقط 1007363904
+    if (user) {
+      const cleanId = (user.nationalId || user.username || '').trim();
+      const cleanEmail = (user.email || '').trim().toLowerCase();
+      const isDesignatedAdmin =
+        cleanId === '1007363904' ||
+        cleanEmail === 'admin.1007363904@htaf.online' ||
+        cleanEmail === 'htaf.online@gmail.com' ||
+        user.id === 'admin_1007363904';
+
+      if (!isDesignatedAdmin) {
+        return {
+          allowed: false,
+          reason: 'صلاحيات الأدمن العام مخصصة حصرياً لمدير المنصة الرئيسي.',
+          suggestedTab: 'dashboard'
+        };
+      }
     }
   }
 

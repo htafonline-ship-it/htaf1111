@@ -484,6 +484,61 @@ export interface CurriculumBook {
   versionHistoryId?: string; // Tracks archived previous versions
 }
 
+export interface LessonPageRecord {
+  id?: string;
+  book_id?: string;
+  lesson_id?: string;
+  page_number: number;
+  page_text: string;
+  page_image_url?: string;
+  extraction_status?: 'pending' | 'completed' | 'failed' | 'manual';
+  extracted_at?: string;
+}
+
+export interface SmartPageSummary {
+  title: string;
+  keyPoints: string[];
+  concepts: string[];
+  laws?: string[];
+  conclusion: string;
+}
+
+export interface SmartPageExerciseItem {
+  id: string;
+  exerciseNumber: string;
+  question: string;
+  solution: string;
+  hint: string;
+  explanation: string;
+  similarQuestion: string;
+}
+
+export interface SmartPageQuizQuestion {
+  id: string;
+  type: 'mcq' | 'true_false' | 'fill_blank' | 'short_answer' | 'problem';
+  question: string;
+  options: string[];
+  correctAnswer: number;
+  explanation: string;
+}
+
+export interface SmartPageQuiz {
+  quizTitle: string;
+  totalQuestions: number;
+  questions: SmartPageQuizQuestion[];
+}
+
+export interface SmartPageFlashcard {
+  front: string;
+  back: string;
+}
+
+export interface SmartPageVocabulary {
+  term: string;
+  definition: string;
+  context?: string;
+}
+
 export interface CurriculumSyncLog {
   id: string;
   timestamp: string;

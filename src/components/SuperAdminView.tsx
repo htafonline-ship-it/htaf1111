@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { SchoolTenant, SchoolRegistrationCode, CurriculumBook, AuthUser } from '../types';
 import { CurriculumImportView } from './CurriculumImportView';
 import { KharjSchoolsHub } from './KharjSchoolsHub';
+import { SiteVisitAnalyticsView } from './admin/SiteVisitAnalyticsView';
 import {
   getSystemHealthTelemetry,
   getSystemTechnicalLogs,
@@ -49,13 +50,16 @@ import {
   Clock,
   ExternalLink,
   HelpCircle,
-  Trash2
+  Trash2,
+  BarChart3,
+  TrendingUp
 } from 'lucide-react';
 
 interface SuperAdminViewProps {
   schools: SchoolTenant[];
   registrationCodes: SchoolRegistrationCode[];
   centralBooks: CurriculumBook[];
+  currentUser?: AuthUser | null;
   onAddRegistrationCode: (newCode: SchoolRegistrationCode) => void;
   onToggleCodeStatus: (codeId: string) => void;
   onToggleSchoolApproval: (schoolId: string) => void;
@@ -77,6 +81,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   schools,
   registrationCodes,
   centralBooks,
+  currentUser,
   onAddRegistrationCode,
   onToggleCodeStatus,
   onToggleSchoolApproval,
@@ -93,7 +98,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   onOpenRadar,
   onDeleteSchool
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'codes' | 'schools' | 'new_code' | 'curriculum_import' | 'kharj_schools' | 'system_health'>('kharj_schools');
+  const [activeSubTab, setActiveSubTab] = useState<'codes' | 'schools' | 'new_code' | 'curriculum_import' | 'kharj_schools' | 'system_health' | 'visit_analytics'>('kharj_schools');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
@@ -270,6 +275,18 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
           <div className="flex items-center gap-2.5 flex-wrap shrink-0">
             <button
+              onClick={() => setActiveSubTab('visit_analytics')}
+              className={`text-xs font-bold px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2 transition ${
+                activeSubTab === 'visit_analytics'
+                  ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-400'
+                  : 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border-indigo-500/30'
+              }`}
+            >
+              <BarChart3 className="w-4 h-4 text-indigo-300" />
+              <span>إحصائيات الدخول والزيارات</span>
+            </button>
+
+            <button
               onClick={() => setActiveSubTab('system_health')}
               className="bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold px-4 py-3 rounded-2xl border border-cyan-500/30 shadow-xl flex items-center gap-2 transition"
             >
@@ -324,6 +341,18 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       {/* Control Tabs */}
       <div className="flex items-center justify-between gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveSubTab('visit_analytics')}
+            className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 whitespace-nowrap ${
+              activeSubTab === 'visit_analytics'
+                ? 'bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md'
+                : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-800'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4 text-indigo-400" />
+            <span>إحصائيات الدخول والزيارات للموقع</span>
+          </button>
+
           <button
             onClick={() => setActiveSubTab('system_health')}
             className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 whitespace-nowrap ${
@@ -1035,15 +1064,16 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                             {grant.status === 'active' && (
                               <button
                                 onClick={() => {
-                                  const currentAdmin: AuthUser = {
-                                    id: 'usr-super-admin-01',
-                                    username: 'superadmin',
-                                    fullName: 'د. فهد السلمان - المشرف العام',
-                                    email: 'fahad.alsalman@smartschool.edu.sa',
+                                  const effectiveAdmin: AuthUser = currentUser || {
+                                    id: 'admin_1007363904',
+                                    username: '1007363904',
+                                    fullName: 'مدير المنصة الرئيسي (Super Admin)',
+                                    email: 'admin.1007363904@htaf.online',
+                                    nationalId: '1007363904',
                                     role: 'super_admin',
                                     loginMethod: 'credentials'
                                   };
-                                  revokeEmergencySupportAccess(currentAdmin, grant.id);
+                                  revokeEmergencySupportAccess(effectiveAdmin, grant.id);
                                   setEmergencyGrants(getAllEmergencyGrants());
                                 }}
                                 className="text-[11px] font-black text-rose-700 hover:text-rose-900 bg-rose-50 border border-rose-200 px-3 py-1 rounded-lg transition"
@@ -1133,6 +1163,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         </div>
       )}
 
+      {/* SITE VISITS & LOGINS ANALYTICS VIEW */}
+      {activeSubTab === 'visit_analytics' && (
+        <SiteVisitAnalyticsView />
+      )}
+
       {/* EMERGENCY BREAK-GLASS REQUEST MODAL */}
       {showEmergencyModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -1170,11 +1205,12 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                 e.preventDefault();
                 if (!emergencyJustification.trim()) return;
 
-                const currentAdmin: AuthUser = {
-                  id: 'usr-super-admin-01',
-                  username: 'superadmin',
-                  fullName: 'د. فهد السلمان - المشرف العام',
-                  email: 'fahad.alsalman@smartschool.edu.sa',
+                const effectiveAdmin: AuthUser = currentUser || {
+                  id: 'admin_1007363904',
+                  username: '1007363904',
+                  fullName: 'مدير المنصة الرئيسي (Super Admin)',
+                  email: 'admin.1007363904@htaf.online',
+                  nationalId: '1007363904',
                   role: 'super_admin',
                   loginMethod: 'credentials'
                 };
@@ -1182,7 +1218,7 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
                 const targetSchoolName = emergencySchoolId === 'all' ? 'جميع مدارس المنظومة' : (selectedSch?.name || emergencySchoolId);
 
                 grantEmergencySupportAccess(
-                  currentAdmin,
+                  effectiveAdmin,
                   emergencySchoolId,
                   targetSchoolName,
                   emergencyJustification,

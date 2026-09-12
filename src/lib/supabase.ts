@@ -52,24 +52,13 @@ export const supabase: SupabaseClient = createClient(
 // -------------------------------------------------------------
 
 export async function signInWithGoogle(customRedirectUrl?: string) {
-  let redirectUrl = customRedirectUrl;
-  if (!redirectUrl) {
-    if (typeof window !== 'undefined' && window.location.origin && window.location.origin !== 'null') {
-      const origin = window.location.origin;
-      redirectUrl = origin.endsWith('/') ? origin : `${origin}/`;
-    } else {
-      redirectUrl = 'https://htaf.online/';
-    }
-  }
+  const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://htaf.online';
+  const redirectTo = customRedirectUrl || origin;
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: {
-      redirectTo: redirectUrl,
-      queryParams: {
-        access_type: 'offline',
-        prompt: 'consent',
-      },
+      redirectTo: redirectTo,
     },
   });
   if (error) throw error;
@@ -119,6 +108,7 @@ export interface DbProfile {
   username: string;
   email: string;
   role: string;
+  national_id?: string;
   school_id?: string;
   class_id?: string;
   grade_id?: string;
@@ -172,6 +162,7 @@ export async function upsertUserProfile(profile: {
   username: string;
   email: string;
   role: string;
+  national_id?: string;
   school_id?: string;
   class_id?: string;
   grade_id?: string;
@@ -248,6 +239,10 @@ export function normalizeAuthInput(val: string): string {
     .replace(/[۰-۹]/g, (d) => String(d.charCodeAt(0) - 1776));
 }
 
+export const PRIMARY_ADMIN_NATIONAL_ID = '1007363904';
+export const PRIMARY_ADMIN_PASSWORD = '139213';
+export const PRIMARY_ADMIN_EMAIL = 'admin.1007363904@htaf.online';
+
 /**
  * Sign in using Username or Email with authentic Supabase Auth.
  */
@@ -255,11 +250,63 @@ export async function signInWithUsernameOrEmail(
   identifier: string,
   pass: string
 ): Promise<{ authUser: AuthUser; rawUser?: any }> {
-  const clean = identifier ? identifier.trim() : '';
-  const rawPass = pass ? pass.trim() : '';
+  const clean = normalizeAuthInput(identifier ? identifier.trim() : '');
+  const rawPass = normalizeAuthInput(pass ? pass.trim() : '');
 
-  if (!clean) throw new Error('يرجى إدخال اسم المستخدم أو البريد الإلكتروني.');
+  if (!clean) throw new Error('يرجى إدخال اسم المستخدم أو رقم الهوية أو البريد الإلكتروني.');
   if (!rawPass) throw new Error('يرجى إدخال كلمة المرور.');
+
+  // EXCLUSIVE PRIMARY ADMIN CREDENTIALS:
+  // الادمن فقط 1007363904 والباسبورد 139213
+  const isPrimaryAdminIdentifier =
+    clean === PRIMARY_ADMIN_NATIONAL_ID ||
+    clean.toLowerCase() === 'admin' ||
+    clean.toLowerCase() === 'superadmin' ||
+    clean.toLowerCase() === 'super_admin' ||
+    clean.toLowerCase() === 'admin@htaf.online' ||
+    clean.toLowerCase() === PRIMARY_ADMIN_EMAIL;
+
+  if (isPrimaryAdminIdentifier) {
+    if (rawPass !== PRIMARY_ADMIN_PASSWORD) {
+      throw new Error('اسم المستخدم أو كلمة المرور غير صحيحة.');
+    }
+
+    const adminUser: AuthUser = {
+      id: 'admin_1007363904',
+      username: PRIMARY_ADMIN_NATIONAL_ID,
+      fullName: 'مدير المنصة الرئيسي (Super Admin)',
+      email: PRIMARY_ADMIN_EMAIL,
+      role: 'platform_admin',
+      nationalId: PRIMARY_ADMIN_NATIONAL_ID,
+      accountStatus: 'active',
+      loginMethod: 'credentials',
+      badge: 'مدير المنصة الرئيسي (Super Admin)'
+    };
+
+    try {
+      localStorage.setItem('htaf_active_auth_user', JSON.stringify(adminUser));
+    } catch (e) {
+      console.warn('Could not persist admin auth user to localStorage:', e);
+    }
+
+    // Also attempt asynchronous update/upsert to Supabase profiles if configured
+    if (isSupabaseConfigured && supabase) {
+      upsertUserProfile({
+        id: adminUser.id,
+        username: PRIMARY_ADMIN_NATIONAL_ID,
+        full_name: adminUser.fullName,
+        email: adminUser.email,
+        role: 'platform_admin',
+        national_id: PRIMARY_ADMIN_NATIONAL_ID,
+        account_status: 'active'
+      }).catch((e) => console.warn('Supabase admin profile upsert note:', e));
+    }
+
+    return {
+      authUser: adminUser,
+      rawUser: { id: adminUser.id, email: adminUser.email }
+    };
+  }
 
   if (!isSupabaseConfigured) {
     throw new Error('خدمة Supabase غير مهيأة. يرجى التحقق من متغيرات البيئة.');
@@ -302,26 +349,48 @@ export async function signInWithUsernameOrEmail(
   }
 
   const verifiedRole: UserRole = (profile?.role || link?.role || 'student') as UserRole;
-  const isPlatformAdmin = verifiedRole === 'super_admin' || verifiedRole === 'platform_admin';
+  
+  // EXCLUSIVITY RULE: الادمن فقط 1007363904
+  const isPlatformAdmin =
+    (verifiedRole === 'super_admin' || verifiedRole === 'platform_admin') &&
+    (
+      profile?.national_id === PRIMARY_ADMIN_NATIONAL_ID ||
+      profile?.username === PRIMARY_ADMIN_NATIONAL_ID ||
+      targetEmail === PRIMARY_ADMIN_EMAIL ||
+      targetEmail === 'htaf.online@gmail.com'
+    );
+
+  const effectiveRole: UserRole = isPlatformAdmin
+    ? 'platform_admin'
+    : (verifiedRole === 'super_admin' || verifiedRole === 'platform_admin' ? 'school_admin' : verifiedRole);
 
   if (profile?.id) {
     supabase.from('profiles').update({ last_login_at: new Date().toISOString() }).eq('id', profile.id).then();
   }
 
+  const resolvedUser: AuthUser = {
+    id: authUser.id,
+    username: profile?.username || targetEmail.split('@')[0],
+    fullName: profile?.full_name || authUser.user_metadata?.full_name || targetEmail.split('@')[0],
+    email: targetEmail,
+    role: effectiveRole,
+    schoolId: link?.school_id || profile?.school_id,
+    classId: profile?.class_id,
+    gradeId: profile?.grade_id,
+    nationalId: profile?.national_id,
+    accountStatus: profile?.account_status || 'active',
+    loginMethod: 'credentials',
+    badge: isPlatformAdmin ? 'مدير المنصة الرئيسي (Super Admin)' : undefined
+  };
+
+  try {
+    localStorage.setItem('htaf_active_auth_user', JSON.stringify(resolvedUser));
+  } catch (e) {
+    console.warn('Could not persist auth user to localStorage:', e);
+  }
+
   return {
-    authUser: {
-      id: authUser.id,
-      username: profile?.username || targetEmail.split('@')[0],
-      fullName: profile?.full_name || authUser.user_metadata?.full_name || targetEmail.split('@')[0],
-      email: targetEmail,
-      role: isPlatformAdmin ? 'platform_admin' : verifiedRole,
-      schoolId: link?.school_id || profile?.school_id,
-      classId: profile?.class_id,
-      gradeId: profile?.grade_id,
-      accountStatus: profile?.account_status || 'active',
-      loginMethod: 'credentials',
-      badge: isPlatformAdmin ? 'مدير المنصة الرئيسي (Super Admin)' : undefined
-    },
+    authUser: resolvedUser,
     rawUser: authUser
   };
 }
@@ -795,36 +864,161 @@ export async function deleteSupabaseSchool(schoolId: string): Promise<boolean> {
   }
 }
 
-// 4. Get User's Active School Link from Supabase
+// 4. Get User's School Link from Supabase (Supporting active, pending, suspended)
 export async function getSupabaseUserSchoolLink(userId: string, email?: string): Promise<DbSchoolUser | null> {
-  if (!isSupabaseConfigured) return null;
+  if (!isSupabaseConfigured || !userId) return null;
 
-  // First search by user_id
-  let query = supabase.from('school_users').select('*').eq('user_id', userId).eq('status', 'active').maybeSingle();
-  let { data, error } = await query;
-
-  if (!data && email) {
-    // If not found by user_id, search by email to auto-link
-    const emailQuery = await supabase
+  try {
+    // First search by user_id
+    const { data: userRows } = await supabase
       .from('school_users')
       .select('*')
-      .eq('email', email)
-      .eq('status', 'active')
-      .maybeSingle();
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
 
-    if (emailQuery.data) {
-      // Update user_id to match Supabase auth user_id
-      await supabase
+    if (userRows && userRows.length > 0) {
+      // Prioritize active link if one exists
+      const activeLink = userRows.find((item: DbSchoolUser) => item.status === 'active');
+      return activeLink || userRows[0];
+    }
+
+    if (email) {
+      // If not found by user_id, search by email to auto-link
+      const cleanEmail = email.trim().toLowerCase();
+      const { data: emailRows } = await supabase
         .from('school_users')
-        .update({ user_id: userId })
-        .eq('id', emailQuery.data.id);
+        .select('*')
+        .eq('email', cleanEmail)
+        .order('created_at', { ascending: false });
 
-      return { ...emailQuery.data, user_id: userId };
+      if (emailRows && emailRows.length > 0) {
+        const found = emailRows.find((item: DbSchoolUser) => item.status === 'active') || emailRows[0];
+        // Update user_id to match Supabase auth user_id
+        await supabase
+          .from('school_users')
+          .update({ user_id: userId })
+          .eq('id', found.id);
+
+        return { ...found, user_id: userId };
+      }
+    }
+
+    return null;
+  } catch (err) {
+    console.warn('Error fetching school link from Supabase:', err);
+    return null;
+  }
+}
+
+export interface CompleteStudentRegistrationPayload {
+  userId: string;
+  fullName: string;
+  email: string;
+  schoolId: string;
+  stageName?: string;
+  gradeName?: string;
+  classroomName?: string;
+  classOrTeacherCode?: string;
+}
+
+export async function submitStudentRegistration(payload: CompleteStudentRegistrationPayload): Promise<DbSchoolUser> {
+  if (!isSupabaseConfigured) {
+    throw new Error('خدمة Supabase غير مهيأة.');
+  }
+
+  let finalStatus: 'active' | 'pending' = 'pending';
+  let targetSchoolId = payload.schoolId;
+
+  // Check if classOrTeacherCode matches an active invitation code to auto-approve
+  if (payload.classOrTeacherCode && payload.classOrTeacherCode.trim()) {
+    try {
+      const code = payload.classOrTeacherCode.trim();
+      const { data: invite } = await supabase
+        .from('invitations')
+        .select('*')
+        .eq('code', code)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (invite) {
+        finalStatus = 'active';
+        if (invite.school_id) targetSchoolId = invite.school_id;
+        await supabase.from('invitations').update({ status: 'used' }).eq('id', invite.id);
+      }
+    } catch (e) {
+      console.warn('Notice checking invite code:', e);
     }
   }
 
-  if (error) return null;
-  return data;
+  // 1. Upsert profile in Supabase
+  await upsertUserProfile({
+    id: payload.userId,
+    full_name: payload.fullName,
+    username: payload.email.split('@')[0],
+    email: payload.email,
+    role: 'student',
+    school_id: targetSchoolId,
+    account_status: finalStatus,
+  });
+
+  // 2. Insert or update in school_users
+  const userRecord = {
+    user_id: payload.userId,
+    school_id: targetSchoolId,
+    email: payload.email.trim().toLowerCase(),
+    full_name: payload.fullName,
+    role: 'student',
+    status: finalStatus,
+    created_at: new Date().toISOString()
+  };
+
+  const { data: existing } = await supabase
+    .from('school_users')
+    .select('id')
+    .eq('user_id', payload.userId)
+    .maybeSingle();
+
+  let schoolUserResult: DbSchoolUser | null = null;
+  if (existing) {
+    const { data: updated } = await supabase
+      .from('school_users')
+      .update(userRecord)
+      .eq('id', existing.id)
+      .select()
+      .single();
+    schoolUserResult = updated;
+  } else {
+    const { data: inserted, error: insErr } = await supabase
+      .from('school_users')
+      .insert([userRecord])
+      .select()
+      .single();
+    if (insErr) {
+      console.warn('Insert school_user notice:', insErr.message);
+    }
+    schoolUserResult = inserted;
+  }
+
+  // 3. Register in students table
+  try {
+    await supabase.from('students').insert([{
+      school_id: targetSchoolId,
+      user_id: payload.userId,
+      email: payload.email.trim().toLowerCase(),
+      full_name: payload.fullName,
+      classroom_name: payload.classroomName || 'الفصل العام',
+      grade_name: payload.gradeName || payload.stageName || 'المرحلة الدراسية',
+      status: finalStatus,
+      created_at: new Date().toISOString()
+    }]);
+  } catch (stErr) {
+    console.warn('Student record insert notice:', stErr);
+  }
+
+  return schoolUserResult || {
+    id: `su_${Date.now()}`,
+    ...userRecord
+  };
 }
 
 // 5. Match Invitation upon Google Sign-In

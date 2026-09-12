@@ -21,7 +21,7 @@ import {
 import { CurriculumBookCover } from './CurriculumBookCover';
 import { CurriculumBookDetailModal } from './CurriculumBookDetailModal';
 import { ReportPdfExportModal } from './ReportPdfExportModal';
-import { InteractiveBookPageReader } from './InteractiveBookPageReader';
+import { SmartBookReader } from './SmartBookReader';
 import { BookDownloadModal } from './BookDownloadModal';
 import { UserBookUploadModal } from './UserBookUploadModal';
 import { QuizModal } from './QuizModal';
@@ -1649,12 +1649,18 @@ export const CurriculumLibraryView: React.FC<CurriculumLibraryViewProps> = ({
         />
       )}
 
-      {/* Interactive Page Reader Modal */}
+      {/* Smart Real Book & Curriculum Reader */}
       {readerBook && (
-        <InteractiveBookPageReader
+        <SmartBookReader
           book={readerBook}
-          initialPageNumber={readerPage}
-          initialTab={readerTab}
+          initialPage={readerPage}
+          initialTool={
+            readerTab === 'solve'
+              ? 'solve-exercises'
+              : readerTab === 'quiz'
+              ? 'quiz'
+              : 'summarize'
+          }
           onClose={() => setReaderBook(null)}
           onOpenTeacherWithTopic={(sub, grd) => onSelectTopicForTeacher(sub, grd)}
           onOpenSolverWithQuestion={(q, sub, grd) => onSelectTopicForSolver(q, sub, grd)}

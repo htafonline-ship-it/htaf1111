@@ -582,6 +582,340 @@ async function startServer() {
     }
   });
 
+  // API Route: CORS Book PDF Proxy
+  app.get('/api/book-proxy', async (req, res) => {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    try {
+      const parsed = new URL(targetUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) {
+        return res.status(400).json({ error: 'Invalid protocol' });
+      }
+
+      const originalTlsReject = process.env.NODE_TLS_REJECT_UNAUTHORIZED;
+      process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+      let fetchRes: Response;
+      try {
+        fetchRes = await fetch(targetUrl, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/pdf,application/octet-stream,*/*'
+          }
+        });
+      } finally {
+        process.env.NODE_TLS_REJECT_UNAUTHORIZED = originalTlsReject;
+      }
+
+      if (!fetchRes.ok) {
+        return res.status(fetchRes.status).json({ error: `Proxy fetch failed: ${fetchRes.statusText}` });
+      }
+
+      const contentType = fetchRes.headers.get('content-type') || 'application/pdf';
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      const arrayBuffer = await fetchRes.arrayBuffer();
+      return res.send(Buffer.from(arrayBuffer));
+    } catch (err: any) {
+      console.error('[book-proxy error]', err);
+      return res.status(500).json({ error: `Proxy failed: ${err.message}` });
+    }
+  });
+
+  // API Route: Smart Page Tools (Summarize, Explain, Quiz, Exercises, Ask, OCR, etc.)
+  app.post('/api/page-tools/execute', async (req, res) => {
+    const {
+      toolType,
+      bookTitle = 'المقرر الدراسي',
+      subject = 'عام',
+      grade = 'المتوسط',
+      pageNumber = 1,
+      pageText = '',
+      question = '',
+      imageBase64
+    } = req.body;
+
+    const ai = getGenAI();
+
+    // OCR Action
+    if (toolType === 'ocr') {
+      if (!imageBase64) {
+        return res.status(400).json({ error: 'Image is required for OCR' });
+      }
+
+      if (!ai) {
+        return res.json({
+          success: true,
+          text: `[نص مستخرج] محتوى الصفحة ${pageNumber} من كتاب ${bookTitle}`
+        });
+      }
+
+      try {
+        const cleanBase64 = imageBase64.replace(/^data:image\/[a-z]+;base64,/, '');
+        const response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: 'image/jpeg',
+                    data: cleanBase64
+                  }
+                },
+                {
+                  text: 'استخرج النص العربي والرموز الرياضية والعلمية بدقة متناهية من هذه الصفحة من كتاب المنهج السعودي. أعد النص كاملاً ومرتباً كما هو في الصفحة دون زيادة أو نقصان.'
+                }
+              ]
+            }
+          ]
+        });
+
+        return res.json({
+          success: true,
+          text: response.text || ''
+        });
+      } catch (err: any) {
+        console.error('[OCR Error]', err);
+        return res.status(500).json({ error: err.message || 'فشل استخراج النص عبر تقنية الرؤية البصرية' });
+      }
+    }
+
+    // Tools requiring AI processing with Page Text Context
+    if (!ai) {
+      const fallback = getAuthenticSaudiBookPage(bookTitle, subject, grade, pageNumber);
+      return res.json({
+        success: true,
+        data: {
+          title: fallback.pageHeading,
+          keyPoints: [
+            'التركيز على المفاهيم المعتمدة في المنهج السعودي.',
+            'تطبيق الخطوات المنهجية لحل المسائل والتمارين.',
+            'مراجعة واستيعاب التعاريف والقوانين الأساسية.'
+          ],
+          concepts: fallback.keyConceptsAndLaws || ['مفهوم أساسي', 'قاعدة تطبيقية'],
+          laws: ['قاعدة منهجية للصفحة الحالية'],
+          conclusion: fallback.pageSummary,
+          explanation: `شرح مبسط لصفحة ${pageNumber}: ${fallback.pageSummary}`,
+          questions: [
+            {
+              id: 'q1',
+              type: 'mcq',
+              question: 'ما هو المفهوم الجوهري المطروح في هذه الصفحة؟',
+              options: ['الخيار الصحيح وفق المنهج', 'خيار بديل', 'خيار غير دقيق', 'خيار مضلل'],
+              correctAnswer: 0,
+              explanation: 'يعتمد هذا السؤال على القاعدة الواردة في الصفحة.'
+            },
+            {
+              id: 'q2',
+              type: 'true_false',
+              question: 'المفهوم الرئيسي ينطبق على جميع الحالات المذكورة.',
+              options: ['صح', 'خطأ'],
+              correctAnswer: 0,
+              explanation: 'القاعدة عامة وتغطي جميع التطبيقات المقررة.'
+            }
+          ],
+          exercises: fallback.solvedExercises?.map((ex, idx) => ({
+            id: `ex-${idx + 1}`,
+            title: ex.exerciseNumber || `تمرين ${idx + 1}`,
+            question: ex.question,
+            solution: ex.solution,
+            hint: 'تذكر تطبيق القاعدة المعطاة في صدر الصفحة.',
+            explanation: ex.keyFormula || 'خطوات الحل المعتمدة في دليل المعلم.',
+            similarQuestion: `أوجد حلاً مماثلاً مع تغيير القيم العددية.`
+          })) || [],
+          vocabulary: [
+            { term: 'المفهوم الأول', definition: 'تعريف منهجي مستخلص من الصفحة.' }
+          ],
+          flashcards: [
+            { front: 'ما هو التعريف الرئيسي بالصفحة؟', back: 'التعريف المنهجي المعتمد.' }
+          ],
+          answer: `الإجابة المعتمدة على الصفحة رقم ${pageNumber}: راجع النص والشروحات المذكورة.`
+        }
+      });
+    }
+
+    try {
+      let systemPrompt = '';
+      let userPrompt = '';
+
+      if (toolType === 'summarize') {
+        systemPrompt = `أنت الخبير التعليمي المعتمد لمناهج وزارة التعليم السعودية.
+مهمتك تلخيص محتوى الصفحة رقم (${pageNumber}) من كتاب "${bookTitle}" (${subject} - ${grade}).
+يجب أن يكون التلخيص دقيقاً ومستخرجاً حصراً من نص الصفحة المرفق، بأسلوب تربوي مرتب ومحكم.
+أعد النتيجة بصيغة JSON فقط:
+{
+  "title": "عنوان دقيق للصفحة أو الفكرة الرئيسية",
+  "keyPoints": ["أهم نقطة 1", "أهم نقطة 2", "أهم نقطة 3", "أهم نقطة 4"],
+  "concepts": ["المفهوم 1", "المفهوم 2"],
+  "laws": ["القانون أو القاعدة إن وجدت"],
+  "conclusion": "الخلاصة المركزة للصفحة في فقرة واضحة ومباشرة"
+}`;
+        userPrompt = `نص الصفحة رقم ${pageNumber}:\n${pageText || `صفحة رقم ${pageNumber} من كتاب ${bookTitle}`}`;
+      } else if (toolType === 'explain') {
+        systemPrompt = `أنت معلم متخصص في المناهج السعودية لمادة "${subject}" للصف "${grade}".
+اشرح محتوى الصفحة رقم (${pageNumber}) بأسلوب تربوي مشوق وواضح يتناسب تماماً مع الفئة العمرية للطلاب (${grade})، دون تعقيد جامعي ودون تبسيط مخل.
+أعد النتيجة بصيغة JSON:
+{
+  "title": "عنوان الدرس والشرح",
+  "targetGrade": "${grade}",
+  "explanation": "نص الشرح المفصل والتربوي للصفحة مقسم إلى فقرات مع أمثلة من واقع الحياة",
+  "practicalExample": "مثال تطبيقي عملي يرسخ الفكرة في ذهن الطالب",
+  "teacherAdvice": "نصيحة ذهبية من المعلم للاستذكار وحفظ المعلومات"
+}`;
+        userPrompt = `اشرح هذه الصفحة:\n${pageText}`;
+      } else if (toolType === 'key-ideas') {
+        systemPrompt = `استخرج أهم الأفكار الجوهرية والرسائل التعليمية من الصفحة رقم (${pageNumber}) لكتاب "${bookTitle}" (${grade}).
+أعد النتيجة بصيغة JSON:
+{
+  "mainIdea": "الفكرة المركزية الكبرى",
+  "subIdeas": ["فكرة فرعية 1", "فكرة فرعية 2", "فكرة فرعية 3"],
+  "learningOutcomes": ["مخرج التعلم 1: أن يعرف الطالب كذا", "مخرج التعلم 2: أن يطبق كذا"]
+}`;
+        userPrompt = `استخرج الأفكار من نص الصفحة:\n${pageText}`;
+      } else if (toolType === 'extract-questions' || toolType === 'quiz') {
+        systemPrompt = `أنت واضع اختبارات متمكن وفق المعايير الوزارية السعودية لمادة "${subject}" (${grade}).
+أنشئ أسئلة تقييمية من محتوى الصفحة رقم (${pageNumber}) فقط.
+يجب أن تتضمن الأسئلة: اختيار من متعدد، صح وخطأ، أكمل الفراغ، سؤال قصير، ومسألة تطبيقية (إن كانت المادة علمية/رياضيات).
+أعد النتيجة بصيغة JSON:
+{
+  "quizTitle": "اختبر نفسك: صفحة ${pageNumber}",
+  "totalQuestions": 5,
+  "questions": [
+    {
+      "id": "q1",
+      "type": "mcq",
+      "question": "نص السؤال 1 (اختيار من متعدد)",
+      "options": ["خيار أ", "خيار ب", "خيار ج", "خيار د"],
+      "correctAnswer": 0,
+      "explanation": "شرح الإجابة الصحيحة وتعليلها من الصفحة"
+    },
+    {
+      "id": "q2",
+      "type": "true_false",
+      "question": "نص السؤال 2 (صح وخطأ)",
+      "options": ["صح", "خطأ"],
+      "correctAnswer": 0,
+      "explanation": "التعليل المنهجي"
+    },
+    {
+      "id": "q3",
+      "type": "fill_blank",
+      "question": "نص السؤال 3 (أكمل الفراغ: يسمى كذا بـ ...)",
+      "options": ["الإجابة الصحيحة", "خيار غير صحيح", "خيار آخر", "خيار غير دقيق"],
+      "correctAnswer": 0,
+      "explanation": "شرح المصطلح"
+    },
+    {
+      "id": "q4",
+      "type": "short_answer",
+      "question": "سؤال قصير مقالي للتحقق من الفهم",
+      "options": ["الإجابة النموذجية المختصرة", "إجابة ناقصة", "إجابة خاطئة", "إجابة غير مناسبة"],
+      "correctAnswer": 0,
+      "explanation": "النموذج المعتمد للإجابة"
+    },
+    {
+      "id": "q5",
+      "type": "problem",
+      "question": "مسألة حسابية أو تطبيق تطبيقي مباشر",
+      "options": ["الناتج الصحيح مع الوحدة", "ناتج خاطئ 1", "ناتج خاطئ 2", "ناتج خاطئ 3"],
+      "correctAnswer": 0,
+      "explanation": "خطوات الحل والقانون المطبق"
+    }
+  ]
+}`;
+        userPrompt = `أنشئ الأسئلة من هذا النص المأخوذ من الصفحة:\n${pageText}`;
+      } else if (toolType === 'solve-exercises') {
+        systemPrompt = `أنت معلم حلول ونماذج إجابات دليل المعلم المعتمد لوزارة التعليم.
+اكتشف كافة التدريبات والتمارين والأسئلة الموجودة في الصفحة رقم (${pageNumber}) من كتاب "${bookTitle}" (${subject} - ${grade}).
+أعد النتيجة بصيغة JSON:
+{
+  "pageNumber": ${pageNumber},
+  "exercises": [
+    {
+      "id": "ex1",
+      "exerciseNumber": "سؤال 1",
+      "question": "نص السؤال أو المسألة كما وردت في الصفحة",
+      "solution": "الحل النموذجي الكامل خطوة بخطوة بالتفصيل مع التعليل",
+      "hint": "تلميح ذكي يوجه الطالب للتفكير السليم دون إعطاء الحل مباشرة",
+      "explanation": "شرح عميق لسبب هذا الحل والقاعدة العلمية والرياضية خلفه",
+      "similarQuestion": "سؤال تدريبي مشابه تماماً بنفس الفكرة لاختبار إتقان الطالب"
+    }
+  ]
+}`;
+        userPrompt = `اكتشف وحل تمارين هذه الصفحة:\n${pageText}`;
+      } else if (toolType === 'vocabulary') {
+        systemPrompt = `استخرج المصطلحات العلمية واللغوية والشرعية الجديدة من الصفحة رقم (${pageNumber}) لكتاب "${bookTitle}".
+أعد النتيجة بصيغة JSON:
+{
+  "terms": [
+    {
+      "term": "المصطلح",
+      "definition": "تعريفه المنهجي بدقة",
+      "context": "كيف ورد في سياق الصفحة"
+    }
+  ]
+}`;
+        userPrompt = `استخرج المصطلحات من الصفحة:\n${pageText}`;
+      } else if (toolType === 'flashcards') {
+        systemPrompt = `أنشئ بطاقات مراجعة ذكية (Flashcards) للحفظ والمراجعة السريعة للصفحة رقم (${pageNumber}) من كتاب "${bookTitle}" (${grade}).
+أعد النتيجة بصيغة JSON:
+{
+  "flashcards": [
+    {
+      "front": "سؤال أو مفهوم البطاقة (الوجه الأمامي)",
+      "back": "الإجابة أو التعريف المركز (الوجه الخلفي)"
+    }
+  ]
+}`;
+        userPrompt = `أنشئ بطاقات مراجعة من الصفحة:\n${pageText}`;
+      } else if (toolType === 'simplify') {
+        systemPrompt = `قم بتبسيط وتبسيط الفكرة المطروحة في الصفحة (${pageNumber}) إلى أقصى درجة ممكنة كما لو كنت تشرحها لطفل ذكي، باستخدام التشبيهات والمحاكاة اليومية.
+أعد النتيجة بصيغة JSON:
+{
+  "simpleTitle": "عنوان مرح ومبسط",
+  "simpleAnalogy": "تشبيه من الحياة اليومية يقرب المفهوم",
+  "simpleExplanation": "الشرح المبسط جداً بلغة جذابة وواضحة",
+  "keyTakeaway": "الخلاصة في جملة واحدة سهلة الحفظ"
+}`;
+        userPrompt = `بسط محتوى هذه الصفحة:\n${pageText}`;
+      } else if (toolType === 'ask') {
+        systemPrompt = `أنت المعلم الذكي الخاص بهذه الصفحة من كتاب "${bookTitle}" (${subject} - ${grade}).
+أجب عن سؤال الطالب بالاعتماد بشكل أساسي وحصري على محتوى الصفحة رقم (${pageNumber}).
+إذا كانت المعلومة غير واردة في الصفحة، أشر إلى ذلك بلطف ثم قدم الإجابة التعليمية المعتمدة.
+أعد النتيجة بصيغة JSON:
+{
+  "answer": "الإجابة الشاملة والمباشرة على سؤال الطالب بالاستناد للصفحة",
+  "foundInPage": true,
+  "quoteFromPage": "الاقتباس أو العبارة الداعمة من الصفحة إن وجدت",
+  "relatedTip": "نصيحة أو معلومة إضافية مرتبطة"
+}`;
+        userPrompt = `سؤال الطالب: "${question}"\n\nنص الصفحة الحالية:\n${pageText}`;
+      } else {
+        return res.status(400).json({ error: 'Unknown toolType' });
+      }
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: userPrompt,
+        config: {
+          systemInstruction: systemPrompt,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      return res.json({ success: true, data: parsed });
+    } catch (err: any) {
+      console.error(`[Page tool ${toolType} error]`, err);
+      return res.status(500).json({ error: err.message || 'حدث خطأ أثناء المعالجة بالذكاء الاصطناعي' });
+    }
+  });
+
   // API Route 4: AI Quiz Generator for Teachers
   app.post('/api/generate-quiz', async (req, res) => {
     const { topic, subject, grade, questionsCount = 5 } = req.body;
