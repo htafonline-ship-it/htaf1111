@@ -59,9 +59,34 @@ export async function signInWithGoogle(customRedirectUrl?: string) {
     provider: 'google',
     options: {
       redirectTo: redirectTo,
+      skipBrowserRedirect: true,
     },
   });
   if (error) throw error;
+
+  if (data?.url) {
+    // Pre-check to verify provider is active
+    try {
+      const verifyRes = await fetch(data.url, {
+        method: 'GET',
+        headers: { 'apikey': supabaseAnonKey }
+      });
+      if (verifyRes.status === 400) {
+        const bodyJson = await verifyRes.json().catch(() => null);
+        if (bodyJson?.msg?.includes('Unsupported provider') || bodyJson?.error_code === 'validation_failed') {
+          throw new Error('خدمة تسجيل الدخول بقوقل غير مفعّلة بعد في لوحة تحكم Supabase (Unsupported provider).');
+        }
+      }
+    } catch (checkErr: any) {
+      if (checkErr.message?.includes('غير مفعّلة')) {
+        throw checkErr;
+      }
+      console.warn('Google pre-check network note:', checkErr);
+    }
+
+    window.location.href = data.url;
+  }
+
   return data;
 }
 

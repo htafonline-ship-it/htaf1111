@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AuthUser, UserRole, SchoolTenant } from '../types';
 import {
   supabase,
+  supabaseUrl,
+  supabaseAnonKey,
   signInWithUsernameOrEmail,
   isSupabaseConfigured,
   normalizeAuthInput
@@ -28,7 +30,11 @@ import {
   HelpCircle,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Copy,
+  Check,
+  ExternalLink,
+  Settings
 } from 'lucide-react';
 
 interface LoginModalProps {
@@ -56,6 +62,8 @@ export const LoginModal: React.FC<LoginModalProps> = ({
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [googleNotConfigured, setGoogleNotConfigured] = useState(false);
+  const [copiedCallback, setCopiedCallback] = useState(false);
 
   // 2FA Verification State
   const [is2FAStep, setIs2FAStep] = useState(false);
@@ -96,29 +104,76 @@ export const LoginModal: React.FC<LoginModalProps> = ({
     setErrorMessage('');
   };
 
-  // Google OAuth Login via Supabase Auth strictly
+  // Google OAuth Login via Supabase Auth with diagnostic pre-verification
   const handleGoogleLogin = async () => {
     setIsLoading(true);
     setErrorMessage('');
+    setGoogleNotConfigured(false);
 
     try {
       const origin = typeof window !== 'undefined' && window.location.origin ? window.location.origin : 'https://htaf.online';
       
-      const { error } = await supabase.auth.signInWithOAuth({
+      // Step 1: Obtain the OAuth URL with skipBrowserRedirect so we can check if the provider is enabled
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: origin,
+          skipBrowserRedirect: true,
         }
       });
 
       if (error) {
-        setErrorMessage(error.message || 'تعذر بدء تسجيل الدخول عبر Google. يرجى المحاولة لاحقاً.');
+        if (error.message?.includes('Unsupported provider') || error.message?.includes('provider is not enabled')) {
+          setGoogleNotConfigured(true);
+          setShowCredentialsForm(true);
+          setErrorMessage('موفر تسجيل الدخول بقوقل غير مفعّل في لوحة تحكم Supabase.');
+        } else {
+          setErrorMessage(error.message || 'تعذر بدء تسجيل الدخول عبر Google. يرجى المحاولة لاحقاً.');
+        }
         setIsLoading(false);
+        return;
       }
-      // If no error, browser initiates Google OAuth redirect immediately
+
+      if (!data?.url) {
+        setErrorMessage('تعذر استلام رابط التوجيه الخاص بـ Google من الخادم.');
+        setIsLoading(false);
+        return;
+      }
+
+      // Step 2: Pre-check the authorize endpoint to avoid showing a raw JSON error page to the user
+      try {
+        const verifyRes = await fetch(data.url, {
+          method: 'GET',
+          headers: {
+            'apikey': supabaseAnonKey,
+          }
+        });
+
+        if (verifyRes.status === 400) {
+          const bodyJson = await verifyRes.json().catch(() => null);
+          if (bodyJson?.msg?.includes('Unsupported provider') || bodyJson?.error_code === 'validation_failed') {
+            setIsLoading(false);
+            setGoogleNotConfigured(true);
+            setShowCredentialsForm(true);
+            setErrorMessage('موفر تسجيل الدخول بقوقل (Google Provider) غير مفعّل بعد في لوحة تحكم Supabase.');
+            return;
+          }
+        }
+      } catch (checkErr) {
+        console.warn('Google pre-check network info:', checkErr);
+      }
+
+      // Step 3: Provider is active, navigate to Google sign-in
+      window.location.href = data.url;
     } catch (err: any) {
       console.error('Google OAuth error:', err);
-      setErrorMessage(err?.message || 'تعذر بدء تسجيل الدخول عبر Google. يرجى التحقق من الاتصال.');
+      if (err?.message?.includes('Unsupported provider') || err?.message?.includes('provider is not enabled')) {
+        setGoogleNotConfigured(true);
+        setShowCredentialsForm(true);
+        setErrorMessage('موفر تسجيل الدخول بقوقل غير مفعّل بعد في Supabase.');
+      } else {
+        setErrorMessage(err?.message || 'تعذر بدء تسجيل الدخول عبر Google. يرجى التحقق من الاتصال.');
+      }
       setIsLoading(false);
     }
   };
@@ -465,10 +520,70 @@ export const LoginModal: React.FC<LoginModalProps> = ({
             </div>
 
             {/* Error Message */}
-            {errorMessage && (
+            {errorMessage && !googleNotConfigured && (
               <div className="bg-rose-50 border border-rose-200 text-rose-700 text-xs p-3.5 rounded-2xl flex items-center gap-2.5 animate-fadeIn">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
                 <span className="font-bold leading-relaxed">{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Diagnostic Alert when Google Provider is not enabled in Supabase */}
+            {googleNotConfigured && (
+              <div className="p-4 bg-amber-50/90 border border-amber-300 rounded-2xl text-amber-950 text-xs space-y-3 animate-fadeIn">
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-black text-amber-900 text-xs sm:text-sm">
+                      خدمة الدخول بحساب Google غير مفعّلة حالياً في Supabase
+                    </h4>
+                    <p className="text-amber-800 leading-relaxed text-[11px]">
+                      تظهر رسالة <code className="bg-amber-100 text-rose-700 px-1 py-0.5 rounded font-mono text-[10px]">Unsupported provider: provider is not enabled</code> لأن مفتاح موفر Google غير مفعّل بعد في لوحة تحكم قاعدة البيانات.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Steps & Callback URL */}
+                <div className="bg-white p-3.5 rounded-xl border border-amber-200 space-y-2 text-[11px]">
+                  <div className="flex items-center justify-between flex-wrap gap-1 font-black text-slate-800">
+                    <span>خطوات تفعيل تسجيل الدخول بقوقل:</span>
+                    <a
+                      href="https://supabase.com/dashboard/project/gmnzyurlstuqlehbnupx/auth/providers"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-600 hover:text-indigo-800 flex items-center gap-1 underline text-[11px]"
+                    >
+                      <span>فتح إعدادات Providers في Supabase</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
+
+                  <ol className="list-decimal list-inside space-y-1 text-slate-700 leading-relaxed pr-1 text-[11px]">
+                    <li>افتح صفحة <strong>Auth Providers</strong> في مشروعك في Supabase وانقر على <strong>Google</strong>.</li>
+                    <li>فعّل المفتاح <strong>Enable Sign in with Google</strong> (ON).</li>
+                    <li>أدخل <strong>Client ID</strong> و <strong>Client Secret</strong> (من Google Cloud Console).</li>
+                    <li>تأكد من وضع رابط الـ <strong>Callback URL</strong> التالي في Google Console:</li>
+                  </ol>
+
+                  <div className="flex items-center gap-2 bg-slate-900 text-slate-100 p-2.5 rounded-xl font-mono text-[10.5px] dir-ltr justify-between">
+                    <span className="truncate">{supabaseUrl}/auth/v1/callback</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(`${supabaseUrl}/auth/v1/callback`);
+                        setCopiedCallback(true);
+                        setTimeout(() => setCopiedCallback(false), 3000);
+                      }}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1 rounded-lg text-[10.5px] font-sans font-bold flex items-center gap-1 shrink-0 transition"
+                    >
+                      {copiedCallback ? <Check className="w-3 h-3 text-emerald-300" /> : <Copy className="w-3 h-3" />}
+                      <span>{copiedCallback ? 'تم النسخ!' : 'نسخ الرابط'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-amber-100/60 p-2.5 rounded-xl text-center text-[11px] text-amber-900 font-bold">
+                  💡 يمكنك الآن تسجيل الدخول فوراً باستخدام <strong>اسم المستخدم وكلمة المرور</strong> بالأسفل دون انتظار!
+                </div>
               </div>
             )}
 
