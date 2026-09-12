@@ -13,6 +13,7 @@ import {
   EmergencyAccessGrant,
   SystemTechnicalErrorLog
 } from '../lib/privacyService';
+import { getSchoolsSchemaMigrationSql } from '../lib/supabase';
 import {
   Crown,
   KeyRound,
@@ -52,7 +53,8 @@ import {
   HelpCircle,
   Trash2,
   BarChart3,
-  TrendingUp
+  TrendingUp,
+  Database
 } from 'lucide-react';
 
 interface SuperAdminViewProps {
@@ -98,10 +100,11 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
   onOpenRadar,
   onDeleteSchool
 }) => {
-  const [activeSubTab, setActiveSubTab] = useState<'codes' | 'schools' | 'new_code' | 'curriculum_import' | 'kharj_schools' | 'system_health' | 'visit_analytics'>('kharj_schools');
+  const [activeSubTab, setActiveSubTab] = useState<'codes' | 'schools' | 'new_code' | 'curriculum_import' | 'kharj_schools' | 'system_health' | 'visit_analytics' | 'platform_analytics'>('kharj_schools');
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [copiedSql, setCopiedSql] = useState(false);
+  const [copiedSchoolsSql, setCopiedSchoolsSql] = useState(false);
 
   // Masking & Security State for Passwords/Credentials
   const [showSecretCode, setShowSecretCode] = useState(false);
@@ -275,15 +278,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
 
           <div className="flex items-center gap-2.5 flex-wrap shrink-0">
             <button
-              onClick={() => setActiveSubTab('visit_analytics')}
+              onClick={() => setActiveSubTab('platform_analytics')}
               className={`text-xs font-bold px-4 py-3 rounded-2xl border shadow-xl flex items-center gap-2 transition ${
-                activeSubTab === 'visit_analytics'
+                activeSubTab === 'platform_analytics' || activeSubTab === 'visit_analytics'
                   ? 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white border-indigo-400'
                   : 'bg-indigo-950/80 hover:bg-indigo-900 text-indigo-200 border-indigo-500/30'
               }`}
             >
               <BarChart3 className="w-4 h-4 text-indigo-300" />
-              <span>إحصائيات الدخول والزيارات</span>
+              <span>تحليلات المنصة</span>
             </button>
 
             <button
@@ -342,15 +345,15 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
       <div className="flex items-center justify-between gap-4 bg-white p-2 rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveSubTab('visit_analytics')}
+            onClick={() => setActiveSubTab('platform_analytics')}
             className={`px-4 py-2.5 rounded-xl text-xs font-black transition flex items-center gap-2 whitespace-nowrap ${
-              activeSubTab === 'visit_analytics'
+              activeSubTab === 'platform_analytics' || activeSubTab === 'visit_analytics'
                 ? 'bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-md'
                 : 'text-slate-700 hover:bg-indigo-50 hover:text-indigo-800'
             }`}
           >
             <BarChart3 className="w-4 h-4 text-indigo-400" />
-            <span>إحصائيات الدخول والزيارات للموقع</span>
+            <span>تحليلات المنصة</span>
           </button>
 
           <button
@@ -932,6 +935,20 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
               <div className="flex items-center gap-2 flex-wrap shrink-0">
                 <button
                   onClick={() => {
+                    const sql = getSchoolsSchemaMigrationSql();
+                    navigator.clipboard.writeText(sql);
+                    setCopiedSchoolsSql(true);
+                    setTimeout(() => setCopiedSchoolsSql(false), 3000);
+                  }}
+                  className="bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-black px-4 py-2.5 rounded-xl border border-indigo-200 flex items-center gap-2 transition shadow-sm"
+                  title="نسخ كود SQL لإضافة عمود academic_year وترقية جدول المدارس في Supabase"
+                >
+                  <Database className="w-4 h-4 text-indigo-600" />
+                  <span>{copiedSchoolsSql ? 'تم نسخ SQL المدارس!' : 'نسخ SQL ترقية المدارس (academic_year)'}</span>
+                </button>
+
+                <button
+                  onClick={() => {
                     const sql = getStrictPrivacyRlsSql();
                     navigator.clipboard.writeText(sql);
                     setCopiedSql(true);
@@ -1163,9 +1180,9 @@ export const SuperAdminView: React.FC<SuperAdminViewProps> = ({
         </div>
       )}
 
-      {/* SITE VISITS & LOGINS ANALYTICS VIEW */}
-      {activeSubTab === 'visit_analytics' && (
-        <SiteVisitAnalyticsView />
+      {/* PLATFORM ANALYTICS DASHBOARD - PROTECTED FOR SUPER ADMIN ONLY */}
+      {(activeSubTab === 'platform_analytics' || activeSubTab === 'visit_analytics') && (
+        <SiteVisitAnalyticsView schools={schools} currentUser={currentUser} />
       )}
 
       {/* EMERGENCY BREAK-GLASS REQUEST MODAL */}

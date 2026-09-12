@@ -1029,10 +1029,66 @@ export default function App() {
             onClose={() => setIsCreateSchoolOpen(false)}
             onCancel={() => setIsCreateSchoolOpen(false)}
             onSchoolCreated={(newSch) => {
+              const formattedNew: SchoolTenant = {
+                id: newSch.id,
+                name: newSch.name,
+                nameEn: newSch.name_en || newSch.name,
+                slug: newSch.slug || newSch.id,
+                logoText: newSch.name ? newSch.name.slice(0, 2) : 'مد',
+                badge: `${newSch.type || newSch.education_type || 'مدرسة'} - ${newSch.stage || 'تعليم عام'}`,
+                primaryColor: 'from-blue-600 to-indigo-600',
+                accentColor: 'blue',
+                motto: 'التعليم الذكي والجيل الواعد',
+                location: `${newSch.city || ''} ${newSch.region ? `- ${newSch.region}` : ''}`.trim() || 'المملكة العربية السعودية',
+                gender: (newSch.school_gender || (newSch.gender_type === 'بنات' ? 'girls' : newSch.gender_type === 'مشتركة' ? 'mixed' : 'boys')) as any,
+                educationType: (newSch.education_type || newSch.type || 'حكومي') as any,
+                stage: (newSch.stage || 'متوسط') as any,
+                regionName: newSch.region,
+                cityName: newSch.city,
+                district: newSch.district,
+                moeCode: newSch.moe_code || newSch.license_number,
+                officialEmail: newSch.email,
+                phone: newSch.phone,
+                principalName: newSch.principal_name,
+                principalEmail: newSch.email,
+                totalStudentsCount: 0,
+                totalTeachersCount: 0,
+                isApproved: true,
+                circulars: []
+              };
+              handleManualSchoolCreated(formattedNew);
               loadRealSchools();
               setIsCreateSchoolOpen(false);
             }}
             onSuccess={(newSch) => {
+              const formattedNew: SchoolTenant = {
+                id: newSch.id,
+                name: newSch.name,
+                nameEn: newSch.name_en || newSch.name,
+                slug: newSch.slug || newSch.id,
+                logoText: newSch.name ? newSch.name.slice(0, 2) : 'مد',
+                badge: `${newSch.type || newSch.education_type || 'مدرسة'} - ${newSch.stage || 'تعليم عام'}`,
+                primaryColor: 'from-blue-600 to-indigo-600',
+                accentColor: 'blue',
+                motto: 'التعليم الذكي والجيل الواعد',
+                location: `${newSch.city || ''} ${newSch.region ? `- ${newSch.region}` : ''}`.trim() || 'المملكة العربية السعودية',
+                gender: (newSch.school_gender || (newSch.gender_type === 'بنات' ? 'girls' : newSch.gender_type === 'مشتركة' ? 'mixed' : 'boys')) as any,
+                educationType: (newSch.education_type || newSch.type || 'حكومي') as any,
+                stage: (newSch.stage || 'متوسط') as any,
+                regionName: newSch.region,
+                cityName: newSch.city,
+                district: newSch.district,
+                moeCode: newSch.moe_code || newSch.license_number,
+                officialEmail: newSch.email,
+                phone: newSch.phone,
+                principalName: newSch.principal_name,
+                principalEmail: newSch.email,
+                totalStudentsCount: 0,
+                totalTeachersCount: 0,
+                isApproved: true,
+                circulars: []
+              };
+              handleManualSchoolCreated(formattedNew);
               loadRealSchools();
               setIsCreateSchoolOpen(false);
             }}
