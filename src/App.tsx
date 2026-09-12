@@ -38,7 +38,8 @@ import {
   fetchSupabaseSchoolBySlugOrId,
   fetchUserProfile,
   upsertUserProfile,
-  SupabaseSchoolUserLink
+  SupabaseSchoolUserLink,
+  fetchParentLinkedStudents
 } from './lib/supabase';
 
 import {
@@ -127,8 +128,8 @@ export default function App() {
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
 
   const [currentRole, setCurrentRole] = useState<UserRole>('student');
-  const [schools, setSchools] = useState<SchoolTenant[]>([]);
-  const [currentSchool, setCurrentSchool] = useState<SchoolTenant | null>(null);
+  const [schools, setSchools] = useState<SchoolTenant[]>(INITIAL_SCHOOLS);
+  const [currentSchool, setCurrentSchool] = useState<SchoolTenant | null>(INITIAL_SCHOOLS[0] || null);
   const [activeTab, setActiveTab] = useState<string>('dashboard');
 
   // Dynamic Pages State
@@ -177,11 +178,40 @@ export default function App() {
           totalStudentsCount: 0,
           totalTeachersCount: 0,
           isApproved: s.status === 'active',
+          invitationCode: s.code,
+          registrationCodeUsed: s.code,
           circulars: []
         }));
-        setSchools(formatted);
-        if (!currentSchool || !formatted.find(f => f.id === currentSchool.id)) {
-          setCurrentSchool(formatted[0]);
+
+        // Merge remote schools with INITIAL_SCHOOLS ensuring all directory schools exist
+        const mergedMap = new Map<string, SchoolTenant>();
+        for (const initSch of INITIAL_SCHOOLS) {
+          mergedMap.set(initSch.id, initSch);
+        }
+        for (const remoteSch of formatted) {
+          // Check if remote matches an initial school by name or code
+          let matched = false;
+          for (const [key, existing] of mergedMap.entries()) {
+            if (
+              existing.name === remoteSch.name ||
+              (existing.registrationCodeUsed && existing.registrationCodeUsed === remoteSch.registrationCodeUsed) ||
+              existing.slug === remoteSch.slug
+            ) {
+              mergedMap.delete(key);
+              mergedMap.set(remoteSch.id, { ...existing, ...remoteSch, id: remoteSch.id });
+              matched = true;
+              break;
+            }
+          }
+          if (!matched) {
+            mergedMap.set(remoteSch.id, remoteSch);
+          }
+        }
+
+        const finalMerged = Array.from(mergedMap.values());
+        setSchools(finalMerged);
+        if (!currentSchool || !finalMerged.find(f => f.id === currentSchool.id)) {
+          setCurrentSchool(finalMerged[0] || null);
         }
       }
     } catch (err) {
@@ -275,6 +305,52 @@ export default function App() {
           email === 'htaf.online@gmail.com' ||
           sessionUser.id === 'admin_1007363904'
         );
+
+      // Case Parent: Verified parent from Supabase or with linked children
+      const parentChildren = await fetchParentLinkedStudents(sessionUser.id, email);
+      const isParent = !isPlatformAdmin && (verifiedRole === 'parent' || profile?.role === 'parent' || link?.role === 'parent' || parentChildren.length > 0);
+
+      if (isParent) {
+        setUserSchoolLink(link || null);
+        if (parentChildren.length > 0 && parentChildren[0].schoolId) {
+          const matchedSchool = await fetchSupabaseSchoolBySlugOrId(parentChildren[0].schoolId);
+          if (matchedSchool) {
+            setCurrentSchool({
+              id: matchedSchool.id,
+              name: matchedSchool.name,
+              nameEn: matchedSchool.name,
+              slug: matchedSchool.slug || matchedSchool.id,
+              logoText: matchedSchool.name ? matchedSchool.name.slice(0, 2) : 'مد',
+              badge: matchedSchool.type || 'مدرسة موثقة',
+              primaryColor: 'from-blue-600 to-indigo-600',
+              accentColor: 'blue',
+              motto: 'التعليم الذكي والجيل الواعد',
+              location: `${matchedSchool.city || ''} ${matchedSchool.region || ''}`.trim() || 'المملكة العربية السعودية',
+              totalStudentsCount: 0,
+              totalTeachersCount: 0,
+              isApproved: matchedSchool.status === 'active',
+              circulars: []
+            });
+          }
+        }
+
+        const authUsr: AuthUser = {
+          id: sessionUser.id,
+          username: profile?.username || email.split('@')[0],
+          fullName: profile?.full_name || name,
+          email,
+          role: 'parent',
+          schoolId: parentChildren[0]?.schoolId || link?.school_id,
+          accountStatus: 'active',
+          avatarUrl: profile?.avatar_url || avatarUrl,
+          loginMethod: 'google',
+          badge: 'ولي أمر معتمد'
+        };
+        setCurrentUser(authUsr);
+        setCurrentRole('parent');
+        setActiveTab('parent-portal');
+        return;
+      }
 
       // Case A: User has pending school request
       if (link && link.status === 'pending') {
@@ -1139,7 +1215,7 @@ export default function App() {
               />
             </div>
 
-            {currentUser && currentRole !== 'platform_admin' && currentRole !== 'super_admin' && (!currentSchool || !userSchoolLink?.school_id || userSchoolLink?.status === 'pending' || activeTab === 'unlinked-user') ? (
+            {currentUser && currentRole !== 'platform_admin' && currentRole !== 'super_admin' && currentRole !== 'parent' && (!currentSchool || !userSchoolLink?.school_id || userSchoolLink?.status === 'pending' || activeTab === 'unlinked-user') ? (
               <div className="max-w-4xl mx-auto px-4 py-8">
                 <UnlinkedUserGate
                   currentUser={currentUser}
@@ -1339,6 +1415,17 @@ export default function App() {
                   currentSchool={currentSchool}
                   availableStudents={[]}
                   availableTeachers={[]}
+                />
+              </div>
+            )}
+
+            {activeTab === 'parent-portal' && (
+              <div className="max-w-7xl mx-auto px-4 py-8">
+                <ParentDashboard
+                  profile={studentProfile}
+                  onUpdateScreenTime={handleUpdateScreenTime}
+                  currentUser={currentUser}
+                  currentSchool={currentSchool}
                 />
               </div>
             )}

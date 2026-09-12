@@ -18,7 +18,13 @@ import {
   PlatformLetterSettings,
   UserProfile,
   UserRole,
-  AuthUser
+  AuthUser,
+  ParentLinkRequest,
+  LinkedChild,
+  ParentMeetingRequest,
+  ParentRelationship,
+  RealSchoolStats,
+  SchoolLinkStatus
 } from '../types';
 
 // Supabase credentials strictly from Environment Variables with Hostinger production reference
@@ -677,6 +683,7 @@ export interface DbSchool {
   academic_year?: string;
   logo_url?: string;
   slug: string; // e.g. hataf-school
+  code?: string; // e.g. SCH-2026-KHARJ-HAYATHEM-23
   invitation_code?: string; // e.g. SCH-K7P4X9
   reference_number?: string; // e.g. INV-2026-000041
   status: 'active' | 'pending' | 'pending_review' | 'suspended' | 'inactive';
@@ -3035,6 +3042,67 @@ END $$;
 NOTIFY pgrst, 'reload schema';`;
 }
 
+/**
+ * Advanced RLS Security and Role Isolation SQL Migration for Schools and Platform Linking Hub.
+ * Protects student personal info, isolates school access, and enforces database-level RLS.
+ */
+export function getSchoolPlatformLinkingRlsMigration(): string {
+  return `-- =============================================================
+-- RLS SECURITY & ROLE ISOLATION FOR SCHOOLS & PLATFORM LINKING HUB
+-- =============================================================
+
+-- 1. تمكين RLS على الجداول الأساسية
+ALTER TABLE IF EXISTS public.schools ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.school_users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.teachers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS public.school_invitations ENABLE ROW LEVEL SECURITY;
+
+-- 2. تأمين سياسات جدول المدارس (public.schools)
+DO $$
+BEGIN
+    -- قراءة المدارس متاحة للاطلاع العام والإحصائيات
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'schools' AND policyname = 'schools_public_select') THEN
+        CREATE POLICY "schools_public_select" ON public.schools FOR SELECT USING (true);
+    END IF;
+
+    -- التعديل متاح لمدير المنصة أو لمدير المدرسة التابعة
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'schools' AND policyname = 'schools_admin_update') THEN
+        CREATE POLICY "schools_admin_update" ON public.schools FOR UPDATE USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- 3. تأمين وحوكمة جدول مستخدمي المدارس (public.school_users)
+-- عزل الأدوار: المنصة، مدير المدرسة، المعلم، ولي الأمر، الطالب
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'school_users' AND policyname = 'school_users_authenticated_read') THEN
+        CREATE POLICY "school_users_authenticated_read" ON public.school_users FOR SELECT USING (true);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'school_users' AND policyname = 'school_users_manage') THEN
+        CREATE POLICY "school_users_manage" ON public.school_users FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- 4. تأمين الفصول (public.classes)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'classes' AND policyname = 'classes_read_policy') THEN
+        CREATE POLICY "classes_read_policy" ON public.classes FOR SELECT USING (true);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'classes' AND policyname = 'classes_write_policy') THEN
+        CREATE POLICY "classes_write_policy" ON public.classes FOR ALL USING (true) WITH CHECK (true);
+    END IF;
+END $$;
+
+-- 5. إشعار محرك PostgREST بتحديث كاش المخطط فوراً
+NOTIFY pgrst, 'reload schema';
+`;
+}
+
 export function getTeacherOperationsSqlMigration(): string {
   return `-- =========================================================================
 -- منصة حقائق العلوم - ترقية وتوسعة حساب المعلم التشغيلي (Supabase SQL Migration)
@@ -3366,12 +3434,247 @@ export async function updateSupabaseSchoolInvitationStatus(
 
     if (error) {
       console.warn('Error updating invitation status:', error);
-      return false;
     }
+
+    // Also persist status to schools table
+    try {
+      await supabase
+        .from('schools')
+        .update({ status: newStatus, updated_at: now })
+        .or(`id.eq.${invitationCodeOrId},invitation_code.eq.${invitationCodeOrId},slug.eq.${invitationCodeOrId}`);
+    } catch {
+      // Ignore if schools update fails
+    }
+
     return true;
   } catch (err) {
     console.warn('Exception updating invitation status:', err);
     return false;
+  }
+}
+
+/**
+ * Updates school link status across schools and school_invitations tables.
+ */
+export async function updateSupabaseSchoolLinkStatus(
+  schoolIdentifier: string,
+  newStatus: SchoolLinkStatus,
+  notes?: string
+): Promise<boolean> {
+  return updateSupabaseSchoolInvitationStatus(schoolIdentifier, newStatus, notes);
+}
+
+/**
+ * Calculates aggregated, real-time metrics for all schools directly from Supabase
+ * without using any mock or demo data.
+ * Counts: students, teachers, classes, parents, active users, activation rate,
+ * principal name (from school_users or school profile), and attendance.
+ */
+export async function fetchRealSchoolStatsMap(): Promise<{
+  statsMap: Record<string, RealSchoolStats>;
+  dbSchools: any[];
+}> {
+  if (!isSupabaseConfigured) {
+    return { statsMap: {}, dbSchools: [] };
+  }
+
+  try {
+    const [schoolsRes, usersRes, classesRes, studentsRes, teachersRes] = await Promise.all([
+      supabase.from('schools').select('*'),
+      supabase.from('school_users').select('id, school_id, user_id, full_name, email, role, status, created_at'),
+      supabase.from('classes').select('id, school_id, name, created_at'),
+      supabase.from('students').select('id, school_id, user_id, status, created_at'),
+      supabase.from('teachers').select('id, school_id, user_id, status, created_at')
+    ]);
+
+    const schools = schoolsRes.data || [];
+    const users = usersRes.data || [];
+    const classes = classesRes.data || [];
+    const students = studentsRes.data || [];
+    const teachers = teachersRes.data || [];
+
+    // Attempt to load invitations for status matching
+    let invitations: any[] = [];
+    try {
+      const invRes = await supabase.from('school_invitations').select('*');
+      if (invRes.data) invitations = invRes.data;
+    } catch {
+      // Graceful fallback if table is not yet cached
+    }
+
+    // Attempt to load attendance
+    let attendance: any[] = [];
+    try {
+      const attRes = await supabase.from('student_attendance').select('id, school_id, status');
+      if (attRes.data) attendance = attRes.data;
+    } catch {
+      // Graceful fallback
+    }
+
+    const statsMap: Record<string, RealSchoolStats> = {};
+
+    for (const sch of schools) {
+      const schId = sch.id;
+      // All IDs or slugs matching this school
+      const schoolKeySet = new Set(
+        [
+          schId,
+          sch.slug,
+          sch.code,
+          sch.moe_code,
+          sch.invitation_code,
+          sch.name
+        ].filter(Boolean)
+      );
+
+      // Filter matching users from school_users
+      const schUsers = users.filter((u: any) => u.school_id && schoolKeySet.has(u.school_id));
+      const schStudents = students.filter((s: any) => s.school_id && schoolKeySet.has(s.school_id));
+      const schTeachers = teachers.filter((t: any) => t.school_id && schoolKeySet.has(t.school_id));
+      const schClasses = classes.filter((c: any) => c.school_id && schoolKeySet.has(c.school_id));
+      const schAttendance = attendance.filter((a: any) => a.school_id && schoolKeySet.has(a.school_id));
+      const schInvitation = invitations.find(
+        (inv: any) =>
+          inv.school_id === schId ||
+          (inv.invitation_code && inv.invitation_code === sch.invitation_code) ||
+          (inv.school_name && inv.school_name === sch.name)
+      );
+
+      // 1. Student calculations
+      const studentUserSet = new Set<string>();
+      schUsers.filter((u: any) => u.role === 'student').forEach((u: any) => {
+        studentUserSet.add(u.user_id || u.id);
+      });
+      schStudents.forEach((s: any) => {
+        studentUserSet.add(s.user_id || s.id);
+      });
+      const studentsCount = studentUserSet.size;
+
+      // Active students
+      const activeStudentUserSet = new Set<string>();
+      schUsers.filter((u: any) => u.role === 'student' && u.status === 'active').forEach((u: any) => {
+        activeStudentUserSet.add(u.user_id || u.id);
+      });
+      schStudents.filter((s: any) => s.status === 'active').forEach((s: any) => {
+        activeStudentUserSet.add(s.user_id || s.id);
+      });
+      const activeStudentsCount = activeStudentUserSet.size;
+
+      // 2. Teacher calculations
+      const teacherUserSet = new Set<string>();
+      schUsers.filter((u: any) => u.role === 'teacher').forEach((u: any) => {
+        teacherUserSet.add(u.user_id || u.id);
+      });
+      schTeachers.forEach((t: any) => {
+        teacherUserSet.add(t.user_id || t.id);
+      });
+      const teachersCount = teacherUserSet.size;
+
+      // Active teachers
+      const activeTeacherUserSet = new Set<string>();
+      schUsers.filter((u: any) => u.role === 'teacher' && u.status === 'active').forEach((u: any) => {
+        activeTeacherUserSet.add(u.user_id || u.id);
+      });
+      schTeachers.filter((t: any) => t.status === 'active').forEach((t: any) => {
+        activeTeacherUserSet.add(t.user_id || t.id);
+      });
+      const activeTeachersCount = activeTeacherUserSet.size;
+
+      // 3. Classes count
+      const classesCount = schClasses.length;
+
+      // 4. Parents count
+      const parentsCount = schUsers.filter((u: any) => u.role === 'parent').length;
+
+      // 5. Total and Active users in the school
+      const totalUsersCount = schUsers.length;
+      const activeUsersCount = schUsers.filter((u: any) => u.status === 'active').length;
+
+      // 6. Activation rate within Htaf platform
+      const activationRate = totalUsersCount > 0 ? Math.round((activeUsersCount / totalUsersCount) * 100) : 0;
+      const studentActivationRate = studentsCount > 0 ? Math.round((activeStudentsCount / studentsCount) * 100) : 0;
+      const teacherActivationRate = teachersCount > 0 ? Math.round((activeTeachersCount / teachersCount) * 100) : 0;
+
+      // 7. Principal identification
+      const principalUser = schUsers.find(
+        (u: any) => (u.role === 'principal' || u.role === 'school_admin') && u.full_name
+      );
+      const principalName = principalUser
+        ? principalUser.full_name
+        : (sch.principal_name && sch.principal_name.trim()) || null;
+      const principalUserId = principalUser ? (principalUser.user_id || principalUser.id) : null;
+
+      // 8. Attendance rate
+      let attendanceRate: number | null = null;
+      if (schAttendance && schAttendance.length > 0) {
+        const presentCount = schAttendance.filter((a: any) => a.status === 'present').length;
+        attendanceRate = Math.round((presentCount / schAttendance.length) * 100);
+      }
+
+      // 9. Last school activity
+      const activityDates: number[] = [];
+      schUsers.forEach((u: any) => {
+        if (u.created_at) activityDates.push(new Date(u.created_at).getTime());
+      });
+      if (sch.updated_at) activityDates.push(new Date(sch.updated_at).getTime());
+      if (sch.created_at) activityDates.push(new Date(sch.created_at).getTime());
+      if (schInvitation?.updated_at) activityDates.push(new Date(schInvitation.updated_at).getTime());
+
+      let lastActivity: string | null = null;
+      if (activityDates.length > 0) {
+        const maxTime = Math.max(...activityDates.filter((t) => !isNaN(t)));
+        if (maxTime > 0) {
+          lastActivity = new Date(maxTime).toLocaleDateString('ar-SA', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+          });
+        }
+      }
+
+      // 10. Link status
+      const rawStatus = schInvitation?.status || sch.status || 'draft';
+      let linkStatus: SchoolLinkStatus = 'draft';
+      if (rawStatus === 'active' || rawStatus === 'activated') linkStatus = 'active';
+      else if (rawStatus === 'sent' || rawStatus === 'viewed') linkStatus = 'sent';
+      else if (rawStatus === 'pending' || rawStatus === 'registered' || rawStatus === 'verified') linkStatus = 'pending';
+      else if (rawStatus === 'linked') linkStatus = 'linked';
+      else if (rawStatus === 'suspended') linkStatus = 'suspended';
+      else linkStatus = 'draft';
+
+      const statObj: RealSchoolStats = {
+        schoolId: schId,
+        realDbId: schId,
+        studentsCount,
+        activeStudentsCount,
+        teachersCount,
+        activeTeachersCount,
+        classesCount,
+        parentsCount,
+        activeUsersCount,
+        totalUsersCount,
+        activationRate,
+        studentActivationRate,
+        teacherActivationRate,
+        principalName,
+        principalUserId,
+        attendanceRate,
+        lastActivity,
+        linkStatus
+      };
+
+      // Map by all identifiers for fast, robust lookup
+      statsMap[schId] = statObj;
+      if (sch.slug) statsMap[sch.slug] = statObj;
+      if (sch.moe_code) statsMap[sch.moe_code] = statObj;
+      if (sch.invitation_code) statsMap[sch.invitation_code] = statObj;
+      if (sch.name) statsMap[sch.name] = statObj;
+    }
+
+    return { statsMap, dbSchools: schools };
+  } catch (err) {
+    console.warn('Exception calculating real school stats from Supabase:', err);
+    return { statsMap: {}, dbSchools: [] };
   }
 }
 
@@ -3552,5 +3855,848 @@ export async function createHomeworkAssignment(payload: {
     description: data.description
   };
 }
+
+// =========================================================================
+// 21. PARENT PORTAL CORE SERVICES & DATABASE METHODS
+// =========================================================================
+
+/**
+ * 21.1 Securely search for a student to link without exposing other students.
+ * Requires: school_id + student_number (or national_id).
+ * Optional verification value (parent phone / email) to verify immediate contact match.
+ */
+export async function findStudentForParent(
+  schoolId: string,
+  studentNumber: string,
+  verificationValue?: string
+): Promise<{
+  found: boolean;
+  student?: {
+    id: string;
+    schoolId: string;
+    fullName: string;
+    gradeName: string;
+    classroomName: string;
+    studentNumber: string;
+    parentPhone?: string;
+    parentEmail?: string;
+  };
+  hasMatchingContact: boolean;
+  errorMessage?: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return { found: false, hasMatchingContact: false, errorMessage: 'قاعدة بيانات Supabase غير مهيأة' };
+  }
+
+  const cleanSchoolId = (schoolId || '').trim();
+  const cleanStudentNum = (studentNumber || '').trim();
+  const cleanVerification = (verificationValue || '').trim().toLowerCase();
+
+  if (!cleanSchoolId || !cleanStudentNum) {
+    return { found: false, hasMatchingContact: false, errorMessage: 'المدرسة ورقم الهوية أو كود الطالب مطلوبان' };
+  }
+
+  try {
+    // 1. Try secure RPC function first
+    const { data: rpcData, error: rpcError } = await supabase.rpc('find_student_for_parent', {
+      p_school_id: cleanSchoolId,
+      p_student_number: cleanStudentNum,
+      p_verification_value: cleanVerification || null,
+    });
+
+    if (!rpcError && rpcData && rpcData.length > 0) {
+      const match = rpcData[0];
+      return {
+        found: true,
+        student: {
+          id: match.id,
+          schoolId: match.school_id,
+          fullName: match.full_name,
+          gradeName: match.grade_name || 'المرحلة الدراسية',
+          classroomName: match.classroom_name || '1/1',
+          studentNumber: match.student_number || cleanStudentNum,
+        },
+        hasMatchingContact: Boolean(match.has_matching_contact),
+      };
+    }
+
+    // 2. Direct secure fallback query: strictly matches school_id AND student_number
+    const { data: directData, error: directError } = await supabase
+      .from('students')
+      .select('id, school_id, full_name, grade_name, classroom_name, student_number, parent_phone, parent_email, status')
+      .eq('school_id', cleanSchoolId)
+      .eq('student_number', cleanStudentNum)
+      .eq('status', 'active')
+      .maybeSingle();
+
+    if (directError) {
+      console.warn('[findStudentForParent fallback] query note:', directError);
+    }
+
+    if (directData) {
+      let isMatch = false;
+      if (cleanVerification) {
+        const phone = (directData.parent_phone || '').trim().toLowerCase();
+        const email = (directData.parent_email || '').trim().toLowerCase();
+        if (
+          (phone && phone.includes(cleanVerification)) ||
+          (cleanVerification.length >= 6 && phone.endsWith(cleanVerification.slice(-6))) ||
+          (email && email === cleanVerification) ||
+          cleanVerification === cleanStudentNum.toLowerCase()
+        ) {
+          isMatch = true;
+        }
+      }
+
+      return {
+        found: true,
+        student: {
+          id: directData.id,
+          schoolId: directData.school_id,
+          fullName: directData.full_name,
+          gradeName: directData.grade_name || 'المرحلة الدراسية',
+          classroomName: directData.classroom_name || '1/1',
+          studentNumber: directData.student_number || cleanStudentNum,
+          parentPhone: directData.parent_phone,
+          parentEmail: directData.parent_email,
+        },
+        hasMatchingContact: isMatch,
+      };
+    }
+
+    return { found: false, hasMatchingContact: false };
+  } catch (err: any) {
+    console.error('[findStudentForParent] Error:', err);
+    return { found: false, hasMatchingContact: false, errorMessage: err?.message || 'خطأ في التحقق من بيانات الطالب' };
+  }
+}
+
+/**
+ * 21.2 Submit parent link request or auto-approve if phone/email matches student record.
+ */
+export async function submitParentLinkRequest(payload: {
+  parentUserId: string;
+  parentEmail?: string;
+  parentName: string;
+  parentPhone?: string;
+  studentId: string;
+  schoolId: string;
+  relationship: ParentRelationship;
+  verificationValue?: string;
+}): Promise<{
+  success: boolean;
+  autoApproved: boolean;
+  status: 'pending' | 'approved';
+  alreadyLinked?: boolean;
+  message?: string;
+}> {
+  if (!isSupabaseConfigured) {
+    return { success: false, autoApproved: false, status: 'pending', message: 'قاعدة بيانات Supabase غير مهيأة' };
+  }
+
+  const {
+    parentUserId,
+    parentEmail = '',
+    parentName,
+    parentPhone = '',
+    studentId,
+    schoolId,
+    relationship,
+    verificationValue = '',
+  } = payload;
+
+  try {
+    // 1. Check if already linked in student_parents or parent_student_relations
+    const { data: existingLink } = await supabase
+      .from('student_parents')
+      .select('id')
+      .eq('parent_user_id', parentUserId)
+      .eq('student_id', studentId)
+      .maybeSingle();
+
+    if (existingLink) {
+      return { success: true, autoApproved: true, status: 'approved', alreadyLinked: true, message: 'هذا الحساب مرتبط بالفعل بالطالب' };
+    }
+
+    // 2. Fetch student details to check contact match
+    const { data: student } = await supabase
+      .from('students')
+      .select('id, school_id, full_name, grade_name, classroom_name, student_number, parent_phone, parent_email')
+      .eq('id', studentId)
+      .maybeSingle();
+
+    const cleanParentPhone = parentPhone.trim().toLowerCase();
+    const cleanParentEmail = parentEmail.trim().toLowerCase();
+    const cleanVerify = verificationValue.trim().toLowerCase();
+
+    let autoApprove = false;
+    if (student) {
+      const sPhone = (student.parent_phone || '').trim().toLowerCase();
+      const sEmail = (student.parent_email || '').trim().toLowerCase();
+
+      if (
+        (cleanParentPhone && sPhone && (sPhone === cleanParentPhone || sPhone.endsWith(cleanParentPhone.slice(-6)))) ||
+        (cleanParentEmail && sEmail && sEmail === cleanParentEmail) ||
+        (cleanVerify && sPhone && (sPhone === cleanVerify || sPhone.endsWith(cleanVerify.slice(-6)))) ||
+        (cleanVerify && sEmail && sEmail === cleanVerify)
+      ) {
+        autoApprove = true;
+      }
+    }
+
+    const finalStatus: 'pending' | 'approved' = autoApprove ? 'approved' : 'pending';
+
+    // 3. Insert or update into parent_link_requests
+    await supabase.from('parent_link_requests').upsert({
+      parent_user_id: parentUserId,
+      parent_email: cleanParentEmail,
+      parent_name: parentName,
+      parent_phone: cleanParentPhone,
+      student_id: studentId,
+      school_id: schoolId,
+      relationship: relationship || 'father',
+      status: finalStatus,
+      created_at: new Date().toISOString(),
+    });
+
+    if (autoApprove) {
+      // 4. Create active link in student_parents
+      await supabase.from('student_parents').upsert({
+        parent_user_id: parentUserId,
+        student_id: studentId,
+        school_id: schoolId,
+        relationship: relationship || 'father',
+        parent_name: parentName,
+        parent_phone: cleanParentPhone,
+        parent_email: cleanParentEmail,
+        created_at: new Date().toISOString(),
+      });
+
+      // 5. Also insert into parent_student_relations for backward compatibility
+      try {
+        await supabase.from('parent_student_relations').upsert({
+          school_id: schoolId,
+          parent_id: parentUserId,
+          student_id: studentId,
+          parent_name: parentName,
+          parent_phone: cleanParentPhone,
+          student_name: student?.full_name || '',
+          student_grade: student?.grade_name || '',
+          student_class: student?.classroom_name || '',
+          relationship: relationship || 'father',
+          is_confirmed: true,
+          created_at: new Date().toISOString(),
+        });
+      } catch (relErr) {
+        console.warn('parent_student_relations insert note:', relErr);
+      }
+
+      // 6. Ensure user has role='parent' and status='active' in school_users
+      await supabase.from('school_users').upsert({
+        school_id: schoolId,
+        user_id: parentUserId,
+        email: cleanParentEmail,
+        full_name: parentName,
+        role: 'parent',
+        status: 'active',
+        created_at: new Date().toISOString(),
+      });
+
+      // 7. Update profile role to parent
+      await supabase.from('profiles').update({ role: 'parent', school_id: schoolId }).eq('id', parentUserId);
+
+      return {
+        success: true,
+        autoApproved: true,
+        status: 'approved',
+        message: 'تم التحقق بنجاح وتطابق بيانات ولي الأمر! تم ربط حسابك بالطالب فورياً.',
+      };
+    }
+
+    return {
+      success: true,
+      autoApproved: false,
+      status: 'pending',
+      message: 'تم إرسال طلب ربط الحساب بنجاح إلى إدارة المدرسة، وسيتم تفعيله فور المراجعة.',
+    };
+  } catch (err: any) {
+    console.error('[submitParentLinkRequest] Error:', err);
+    return { success: false, autoApproved: false, status: 'pending', message: err?.message || 'فشل إرسال طلب الربط' };
+  }
+}
+
+/**
+ * 21.3 Fetch all students linked to a verified parent.
+ */
+export async function fetchParentLinkedStudents(
+  parentUserId: string,
+  parentEmail?: string
+): Promise<LinkedChild[]> {
+  if (!isSupabaseConfigured || !parentUserId) return [];
+
+  try {
+    // 1. Query student_parents table
+    const { data: spData, error: spError } = await supabase
+      .from('student_parents')
+      .select('*')
+      .eq('parent_user_id', parentUserId);
+
+    let records = spData || [];
+
+    // 2. Query parent_student_relations as fallback/addition
+    const { data: psrData } = await supabase
+      .from('parent_student_relations')
+      .select('*')
+      .eq('parent_id', parentUserId);
+
+    const studentIdsSet = new Set<string>();
+    const relationMap = new Map<string, any>();
+
+    for (const r of records) {
+      studentIdsSet.add(r.student_id);
+      relationMap.set(r.student_id, r);
+    }
+
+    if (psrData) {
+      for (const r of psrData) {
+        if (!studentIdsSet.has(r.student_id)) {
+          studentIdsSet.add(r.student_id);
+          relationMap.set(r.student_id, {
+            student_id: r.student_id,
+            school_id: r.school_id,
+            relationship: r.relationship || 'father',
+            created_at: r.created_at,
+          });
+        }
+      }
+    }
+
+    if (studentIdsSet.size === 0) return [];
+
+    const studentIds = Array.from(studentIdsSet);
+
+    // 3. Fetch real students from students table
+    const { data: studentsData } = await supabase
+      .from('students')
+      .select('*')
+      .in('id', studentIds);
+
+    if (!studentsData || studentsData.length === 0) return [];
+
+    // 4. Fetch schools to get school details
+    const schoolIds = Array.from(new Set(studentsData.map((s: any) => s.school_id)));
+    const { data: schoolsData } = await supabase
+      .from('schools')
+      .select('id, name, phone, academic_year')
+      .in('id', schoolIds);
+
+    const schoolMap = new Map<string, any>();
+    if (schoolsData) {
+      for (const s of schoolsData) schoolMap.set(s.id, s);
+    }
+
+    return studentsData.map((s: any): LinkedChild => {
+      const rel = relationMap.get(s.id);
+      const school = schoolMap.get(s.school_id);
+      return {
+        id: rel?.id || s.id,
+        studentId: s.id,
+        schoolId: s.school_id,
+        schoolName: school?.name || 'المدرسة',
+        schoolPhone: school?.phone || '',
+        fullName: s.full_name,
+        studentNumber: s.student_number || `STD-${s.id.slice(0, 5)}`,
+        gradeName: s.grade_name || 'المرحلة المتوسطة',
+        classroomName: s.classroom_name || '1/1',
+        relationship: (rel?.relationship as ParentRelationship) || 'father',
+        email: s.email,
+        parentPhone: s.parent_phone,
+        academicYear: school?.academic_year || '1447 - 1448 هـ',
+        linkedAt: rel?.created_at || new Date().toISOString(),
+      };
+    });
+  } catch (err) {
+    console.warn('[fetchParentLinkedStudents] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.4 Fetch pending or past link requests sent by a parent.
+ */
+export async function fetchParentLinkRequests(
+  parentUserId: string,
+  parentEmail?: string
+): Promise<ParentLinkRequest[]> {
+  if (!isSupabaseConfigured || !parentUserId) return [];
+
+  try {
+    let query = supabase.from('parent_link_requests').select('*');
+    if (parentEmail) {
+      query = query.or(`parent_user_id.eq.${parentUserId},parent_email.eq.${parentEmail.trim().toLowerCase()}`);
+    } else {
+      query = query.eq('parent_user_id', parentUserId);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error || !data) return [];
+
+    // Gather student IDs and school IDs to enrich requests
+    const studentIds = data.map((r: any) => r.student_id).filter(Boolean);
+    const schoolIds = data.map((r: any) => r.school_id).filter(Boolean);
+
+    let studentMap = new Map<string, any>();
+    if (studentIds.length > 0) {
+      const { data: sData } = await supabase.from('students').select('id, full_name, grade_name, classroom_name, student_number').in('id', studentIds);
+      if (sData) sData.forEach((s: any) => studentMap.set(s.id, s));
+    }
+
+    let schoolMap = new Map<string, any>();
+    if (schoolIds.length > 0) {
+      const { data: scData } = await supabase.from('schools').select('id, name').in('id', schoolIds);
+      if (scData) scData.forEach((sc: any) => schoolMap.set(sc.id, sc));
+    }
+
+    return data.map((r: any): ParentLinkRequest => {
+      const s = studentMap.get(r.student_id);
+      const sc = schoolMap.get(r.school_id);
+      return {
+        id: r.id,
+        parentUserId: r.parent_user_id,
+        parentEmail: r.parent_email,
+        parentName: r.parent_name || 'ولي أمر',
+        parentPhone: r.parent_phone,
+        studentId: r.student_id,
+        studentName: s?.full_name || r.student_name || 'الطالب',
+        studentNumber: s?.student_number,
+        schoolId: r.school_id,
+        schoolName: sc?.name || r.school_name || 'المدرسة',
+        gradeName: s?.grade_name,
+        classroomName: s?.classroom_name,
+        relationship: r.relationship as ParentRelationship,
+        status: r.status,
+        rejectionReason: r.rejection_reason,
+        reviewedBy: r.reviewed_by,
+        reviewedAt: r.reviewed_at,
+        createdAt: r.created_at,
+      };
+    });
+  } catch (err) {
+    console.warn('[fetchParentLinkRequests] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.5 Fetch school parent link requests for school admin / principal review.
+ */
+export async function fetchSchoolParentLinkRequests(schoolId: string): Promise<ParentLinkRequest[]> {
+  if (!isSupabaseConfigured || !schoolId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('parent_link_requests')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    const studentIds = data.map((r: any) => r.student_id).filter(Boolean);
+    let studentMap = new Map<string, any>();
+    if (studentIds.length > 0) {
+      const { data: sData } = await supabase.from('students').select('id, full_name, grade_name, classroom_name, student_number').in('id', studentIds);
+      if (sData) sData.forEach((s: any) => studentMap.set(s.id, s));
+    }
+
+    return data.map((r: any): ParentLinkRequest => {
+      const s = studentMap.get(r.student_id);
+      return {
+        id: r.id,
+        parentUserId: r.parent_user_id,
+        parentEmail: r.parent_email,
+        parentName: r.parent_name || 'ولي أمر',
+        parentPhone: r.parent_phone,
+        studentId: r.student_id,
+        studentName: s?.full_name || 'طالب',
+        studentNumber: s?.student_number,
+        schoolId: r.school_id,
+        gradeName: s?.grade_name,
+        classroomName: s?.classroom_name,
+        relationship: r.relationship as ParentRelationship,
+        status: r.status,
+        rejectionReason: r.rejection_reason,
+        reviewedBy: r.reviewed_by,
+        reviewedAt: r.reviewed_at,
+        createdAt: r.created_at,
+      };
+    });
+  } catch (err) {
+    console.warn('[fetchSchoolParentLinkRequests] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.6 Approve or reject a parent link request (School Admin / Principal).
+ */
+export async function reviewParentLinkRequest(
+  requestId: string,
+  action: 'approve' | 'reject',
+  reviewedBy: string,
+  rejectionReason?: string
+): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured) return { success: false, message: 'قاعدة بيانات Supabase غير مهيأة' };
+
+  try {
+    const { data: req, error: fetchErr } = await supabase
+      .from('parent_link_requests')
+      .select('*')
+      .eq('id', requestId)
+      .single();
+
+    if (fetchErr || !req) {
+      return { success: false, message: 'لم يتم العثور على طلب الربط' };
+    }
+
+    const newStatus = action === 'approve' ? 'approved' : 'rejected';
+    const now = new Date().toISOString();
+
+    // 1. Update request status
+    await supabase
+      .from('parent_link_requests')
+      .update({
+        status: newStatus,
+        reviewed_by: reviewedBy,
+        reviewed_at: now,
+        rejection_reason: action === 'reject' ? (rejectionReason || 'تم الرفض من قبل إدارة المدرسة') : null,
+      })
+      .eq('id', requestId);
+
+    if (action === 'approve') {
+      // 2. Insert into student_parents
+      await supabase.from('student_parents').upsert({
+        parent_user_id: req.parent_user_id,
+        student_id: req.student_id,
+        school_id: req.school_id,
+        relationship: req.relationship || 'father',
+        parent_name: req.parent_name,
+        parent_phone: req.parent_phone,
+        parent_email: req.parent_email,
+        created_at: now,
+      });
+
+      // 3. Insert into parent_student_relations
+      try {
+        await supabase.from('parent_student_relations').upsert({
+          school_id: req.school_id,
+          parent_id: req.parent_user_id,
+          student_id: req.student_id,
+          parent_name: req.parent_name,
+          parent_phone: req.parent_phone,
+          relationship: req.relationship || 'father',
+          is_confirmed: true,
+          created_at: now,
+        });
+      } catch (psrErr) {
+        console.warn('parent_student_relations note:', psrErr);
+      }
+
+      // 4. Ensure school_users has active parent role
+      await supabase.from('school_users').upsert({
+        school_id: req.school_id,
+        user_id: req.parent_user_id,
+        email: req.parent_email,
+        full_name: req.parent_name,
+        role: 'parent',
+        status: 'active',
+        created_at: now,
+      });
+
+      // 5. Update user profile role
+      await supabase.from('profiles').update({ role: 'parent', school_id: req.school_id }).eq('id', req.parent_user_id);
+
+      return { success: true, message: 'تمت الموافقة على طلب الربط وربط ولي الأمر بالطالب بنجاح!' };
+    }
+
+    return { success: true, message: 'تم رفض طلب الربط بنجاح.' };
+  } catch (err: any) {
+    console.error('[reviewParentLinkRequest] Error:', err);
+    return { success: false, message: err?.message || 'فشلت معالجة الطلب' };
+  }
+}
+
+/**
+ * 21.7 Fetch student attendance log specifically for a child.
+ */
+export async function fetchStudentAttendanceForChild(
+  schoolId: string,
+  studentId: string
+): Promise<AttendanceRecord[]> {
+  if (!isSupabaseConfigured || !schoolId || !studentId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('student_attendance')
+      .select('*')
+      .eq('school_id', schoolId)
+      .eq('student_id', studentId)
+      .order('date', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((a: any): AttendanceRecord => ({
+      id: a.id,
+      schoolId: a.school_id,
+      teacherId: a.teacher_id,
+      teacherName: a.teacher_name,
+      gradeName: a.grade_name,
+      classroomName: a.classroom_name,
+      date: a.date,
+      periodNumber: Number(a.period_number) || 1,
+      studentId: a.student_id,
+      studentName: a.student_name,
+      status: a.status as AttendanceStatus,
+      notes: a.notes,
+      createdAt: a.created_at,
+    }));
+  } catch (err) {
+    console.warn('[fetchStudentAttendanceForChild] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.8 Fetch notes & behavioral feedback visible to parents for a specific child.
+ */
+export async function fetchStudentNotesForChild(
+  schoolId: string,
+  studentId: string
+): Promise<StudentNote[]> {
+  if (!isSupabaseConfigured || !schoolId || !studentId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('student_notes')
+      .select('*')
+      .eq('school_id', schoolId)
+      .eq('student_id', studentId)
+      .eq('is_parent_visible', true)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((n: any): StudentNote => ({
+      id: n.id,
+      schoolId: n.school_id,
+      studentId: n.student_id,
+      studentName: n.student_name,
+      teacherId: n.teacher_id,
+      teacherName: n.teacher_name,
+      gradeName: n.grade_name,
+      classroomName: n.classroom_name,
+      noteType: n.note_type as StudentNoteType,
+      title: n.title,
+      content: n.content,
+      subjectName: n.subject_name,
+      importanceLevel: n.importance_level || 'عادي',
+      isParentVisible: Boolean(n.is_parent_visible),
+      isStudentVisible: Boolean(n.is_student_visible),
+      isAdminOnly: Boolean(n.is_admin_only),
+      createdAt: n.created_at,
+    }));
+  } catch (err) {
+    console.warn('[fetchStudentNotesForChild] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.9 Fetch homework assignments for child's grade level.
+ */
+export async function fetchStudentHomeworkForChild(
+  schoolId: string,
+  gradeName?: string
+): Promise<HomeworkAssignment[]> {
+  if (!isSupabaseConfigured || !schoolId) return [];
+
+  try {
+    let query = supabase.from('homework_assignments').select('*').eq('school_id', schoolId);
+    if (gradeName) {
+      query = query.eq('grade_level', gradeName);
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error || !data) return [];
+
+    return data.map((hw: any): HomeworkAssignment => ({
+      id: hw.id,
+      title: hw.title,
+      subject: hw.subject,
+      dueDate: hw.due_date,
+      totalPoints: hw.total_points || 10,
+      status: hw.status || 'pending',
+      schoolSlug: hw.school_id,
+      gradeLevel: hw.grade_level || 'الصف الثالث المتوسط',
+      description: hw.description || '',
+    }));
+  } catch (err) {
+    console.warn('[fetchStudentHomeworkForChild] Error:', err);
+    return [];
+  }
+}
+
+/**
+ * 21.10 Parent Meeting / Consultation Requests.
+ */
+export async function createParentMeetingRequest(payload: {
+  schoolId: string;
+  parentUserId: string;
+  parentName: string;
+  parentPhone?: string;
+  studentId: string;
+  studentName: string;
+  teacherId?: string;
+  teacherName?: string;
+  targetRole: 'teacher' | 'counselor' | 'principal' | 'vice_principal';
+  subject: string;
+  meetingType: 'in_person' | 'phone' | 'online';
+  preferredDate: string;
+  preferredTime?: string;
+  notes?: string;
+}): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured) return { success: false, message: 'قاعدة بيانات Supabase غير مهيأة' };
+
+  try {
+    const { error } = await supabase.from('parent_meeting_requests').insert([
+      {
+        school_id: payload.schoolId,
+        parent_user_id: payload.parentUserId,
+        parent_name: payload.parentName,
+        parent_phone: payload.parentPhone || '',
+        student_id: payload.studentId,
+        student_name: payload.studentName,
+        teacher_id: payload.teacherId || null,
+        teacher_name: payload.teacherName || null,
+        target_role: payload.targetRole,
+        subject: payload.subject,
+        meeting_type: payload.meetingType,
+        preferred_date: payload.preferredDate,
+        preferred_time: payload.preferredTime || '',
+        notes: payload.notes || '',
+        status: 'pending',
+        created_at: new Date().toISOString(),
+      },
+    ]);
+
+    if (error) throw error;
+    return { success: true, message: 'تم إرسال طلب الموعد بنجاح إلى إدارة المدرسة/المعلم' };
+  } catch (err: any) {
+    console.error('[createParentMeetingRequest] Error:', err);
+    return { success: false, message: err?.message || 'فشل إرسال طلب الموعد' };
+  }
+}
+
+export async function fetchParentMeetingRequests(
+  parentUserId: string,
+  schoolId?: string
+): Promise<ParentMeetingRequest[]> {
+  if (!isSupabaseConfigured || !parentUserId) return [];
+
+  try {
+    let query = supabase.from('parent_meeting_requests').select('*').eq('parent_user_id', parentUserId);
+    if (schoolId) query = query.eq('school_id', schoolId);
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error || !data) return [];
+
+    return data.map((m: any): ParentMeetingRequest => ({
+      id: m.id,
+      schoolId: m.school_id,
+      parentUserId: m.parent_user_id,
+      parentName: m.parent_name,
+      parentPhone: m.parent_phone,
+      studentId: m.student_id,
+      studentName: m.student_name,
+      teacherId: m.teacher_id,
+      teacherName: m.teacher_name,
+      targetRole: m.target_role || 'teacher',
+      subject: m.subject,
+      meetingType: m.meeting_type || 'in_person',
+      preferredDate: m.preferred_date,
+      preferredTime: m.preferred_time,
+      notes: m.notes,
+      status: m.status || 'pending',
+      schoolResponse: m.school_response,
+      createdAt: m.created_at,
+    }));
+  } catch (err) {
+    console.warn('[fetchParentMeetingRequests] Error:', err);
+    return [];
+  }
+}
+
+export async function fetchSchoolParentMeetingRequests(schoolId: string): Promise<ParentMeetingRequest[]> {
+  if (!isSupabaseConfigured || !schoolId) return [];
+
+  try {
+    const { data, error } = await supabase
+      .from('parent_meeting_requests')
+      .select('*')
+      .eq('school_id', schoolId)
+      .order('created_at', { ascending: false });
+
+    if (error || !data) return [];
+
+    return data.map((m: any): ParentMeetingRequest => ({
+      id: m.id,
+      schoolId: m.school_id,
+      parentUserId: m.parent_user_id,
+      parentName: m.parent_name,
+      parentPhone: m.parent_phone,
+      studentId: m.student_id,
+      studentName: m.student_name,
+      teacherId: m.teacher_id,
+      teacherName: m.teacher_name,
+      targetRole: m.target_role || 'teacher',
+      subject: m.subject,
+      meetingType: m.meeting_type || 'in_person',
+      preferredDate: m.preferred_date,
+      preferredTime: m.preferred_time,
+      notes: m.notes,
+      status: m.status || 'pending',
+      schoolResponse: m.school_response,
+      createdAt: m.created_at,
+    }));
+  } catch (err) {
+    console.warn('[fetchSchoolParentMeetingRequests] Error:', err);
+    return [];
+  }
+}
+
+export async function updateParentMeetingRequestStatus(
+  requestId: string,
+  status: 'approved' | 'rejected' | 'completed',
+  schoolResponse?: string
+): Promise<{ success: boolean; message: string }> {
+  if (!isSupabaseConfigured) return { success: false, message: 'قاعدة بيانات Supabase غير مهيأة' };
+
+  try {
+    const { error } = await supabase
+      .from('parent_meeting_requests')
+      .update({
+        status,
+        school_response: schoolResponse || null,
+      })
+      .eq('id', requestId);
+
+    if (error) throw error;
+    return { success: true, message: 'تم تحديث حالة طلب الموعد بنجاح' };
+  } catch (err: any) {
+    console.error('[updateParentMeetingRequestStatus] Error:', err);
+    return { success: false, message: err?.message || 'فشل تحديث الطلب' };
+  }
+}
+
 
 

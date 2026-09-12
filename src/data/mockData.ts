@@ -14,12 +14,13 @@ import {
   SchoolRegistrationCode,
   BulkStudentRow
 } from '../types';
+import { KHARJ_TENANT_SCHOOLS } from './kharjSchoolsData';
 
 export const INITIAL_REGISTRATION_CODES: SchoolRegistrationCode[] = [];
 
 export const INITIAL_BULK_STUDENTS_SAMPLE: BulkStudentRow[] = [];
 
-export const INITIAL_SCHOOLS: SchoolTenant[] = [];
+export const INITIAL_SCHOOLS: SchoolTenant[] = KHARJ_TENANT_SCHOOLS;
 
 export const INITIAL_CURRICULUM_SYNC_STATUS: CurriculumSyncStatus = {
   lastSyncTime: 'اليوم، 08:30 ص',

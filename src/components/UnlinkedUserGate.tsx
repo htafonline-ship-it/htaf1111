@@ -7,6 +7,7 @@ import {
   submitStudentRegistration,
   DbSchoolUser
 } from '../lib/supabase';
+import { KHARJ_TENANT_SCHOOLS } from '../data/kharjSchoolsData';
 import {
   School,
   Building2,
@@ -55,10 +56,26 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
 
   const [activeTab, setActiveTab] = useState<'student_profile' | 'teacher_request' | 'join_code'>('student_profile');
 
-  // Real schools list fetched from Supabase
-  const [availableSchools, setAvailableSchools] = useState<SchoolTenant[]>(propSchools);
+  // Real schools list fetched from Supabase (initialized with fallback to KHARJ_TENANT_SCHOOLS)
+  const [availableSchools, setAvailableSchools] = useState<SchoolTenant[]>(() => {
+    if (propSchools && propSchools.length > 0) return propSchools;
+    return KHARJ_TENANT_SCHOOLS;
+  });
   const [schoolsLoading, setSchoolsLoading] = useState(false);
   const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
+
+  // Keep availableSchools in sync if propSchools updates
+  useEffect(() => {
+    if (propSchools && propSchools.length > 0) {
+      setAvailableSchools(prev => {
+        const map = new Map<string, SchoolTenant>();
+        for (const s of KHARJ_TENANT_SCHOOLS) map.set(s.id, s);
+        for (const s of propSchools) map.set(s.id, s);
+        for (const s of prev) if (!map.has(s.id)) map.set(s.id, s);
+        return Array.from(map.values());
+      });
+    }
+  }, [propSchools]);
 
   // Student Profile Completion Form State
   const [studentFullName, setStudentFullName] = useState(activeUser?.fullName || '');
@@ -90,7 +107,7 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
   // Recheck Status State
   const [rechecking, setRechecking] = useState(false);
 
-  // Fetch real schools from Supabase if not populated
+  // Fetch real schools from Supabase and merge
   useEffect(() => {
     let isMounted = true;
     const loadSchools = async () => {
@@ -101,20 +118,54 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
           const formatted: SchoolTenant[] = data.map((s) => ({
             id: s.id,
             name: s.name,
-            nameEn: s.name,
+            nameEn: s.name_en || s.name,
             slug: s.slug || s.id,
             logoText: s.name ? s.name.slice(0, 2) : 'مد',
-            badge: s.type || 'مدرسة موثقة',
+            badge: `${s.type || s.education_type || 'مدرسة'} - ${s.stage || 'تعليم عام'}`,
             primaryColor: 'from-blue-600 to-indigo-600',
             accentColor: 'blue',
             motto: 'التعليم الذكي والجيل الواعد',
-            location: `${s.city || ''} ${s.region || ''}`.trim() || 'المملكة العربية السعودية',
+            location: `${s.city || ''} ${s.district ? `- ${s.district}` : s.region ? `- ${s.region}` : ''}`.trim() || 'المملكة العربية السعودية',
+            gender: (s.school_gender || (s.gender_type === 'بنات' ? 'girls' : s.gender_type === 'مشتركة' ? 'mixed' : 'boys')) as any,
+            educationType: (s.education_type || s.type || 'حكومي') as any,
+            stage: (s.stage || 'متوسط') as any,
+            regionName: s.region,
+            cityName: s.city,
+            district: s.district,
+            moeCode: s.moe_code || s.license_number,
+            officialEmail: s.email,
+            phone: s.phone,
+            principalName: s.principal_name,
+            principalEmail: s.email,
             totalStudentsCount: 0,
             totalTeachersCount: 0,
             isApproved: s.status === 'active',
+            invitationCode: s.code,
+            registrationCodeUsed: s.code,
             circulars: []
           }));
-          setAvailableSchools(formatted);
+
+          setAvailableSchools(prev => {
+            const map = new Map<string, SchoolTenant>();
+            for (const s of KHARJ_TENANT_SCHOOLS) map.set(s.id, s);
+            for (const s of prev) map.set(s.id, s);
+            for (const r of formatted) {
+              let matchedKey = r.id;
+              for (const [k, v] of map.entries()) {
+                if (
+                  v.name === r.name ||
+                  (v.registrationCodeUsed && v.registrationCodeUsed === r.registrationCodeUsed) ||
+                  v.slug === r.slug
+                ) {
+                  matchedKey = k;
+                  break;
+                }
+              }
+              map.delete(matchedKey);
+              map.set(r.id, r);
+            }
+            return Array.from(map.values());
+          });
         }
       } catch (err) {
         console.warn('Notice loading schools for unlinked user:', err);
@@ -123,9 +174,7 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
       }
     };
 
-    if (availableSchools.length === 0) {
-      loadSchools();
-    }
+    loadSchools();
     return () => {
       isMounted = false;
     };
@@ -138,11 +187,60 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
     }
   }, [activeUser]);
 
+  // Robust Arabic normalization helper for search queries
+  const normalizeArabicText = (text: string) => {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/[\u064B-\u065F\u0670]/g, '') // remove diacritics / tashkeel
+      .replace(/[أإآٱ]/g, 'ا')
+      .replace(/ة/g, 'ه')
+      .replace(/[ىي]/g, 'ي')
+      .replace(/ؤ/g, 'و')
+      .replace(/ئ/g, 'ي')
+      .replace(/[\-\_\/\.\,\:\;]/g, ' ')
+      .replace(/\s+/g, ' ');
+  };
+
+  const queryNormalized = normalizeArabicText(schoolSearchQuery);
+  const queryTokens = queryNormalized.split(' ').filter(Boolean);
+
   // Filtered schools for autocomplete
-  const filteredSchools = availableSchools.filter((s) =>
-    s.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
-    (s.location && s.location.toLowerCase().includes(schoolSearchQuery.toLowerCase()))
-  );
+  const filteredSchools = availableSchools.filter((s) => {
+    if (!queryNormalized) return true;
+
+    const searchableText = normalizeArabicText([
+      s.name,
+      s.nameEn,
+      s.location,
+      s.district,
+      s.regionName,
+      s.cityName,
+      s.badge,
+      s.stage,
+      s.moeCode,
+      s.invitationCode,
+      s.registrationCodeUsed,
+      s.slug,
+      s.id
+    ].filter(Boolean).join(' '));
+
+    if (searchableText.includes(queryNormalized)) return true;
+    return queryTokens.every(token => searchableText.includes(token));
+  });
+
+  // Code match detector for registration code or invite code
+  const codeNormalized = teacherOrClassCode.trim();
+  const matchedSchoolByCode = codeNormalized
+    ? availableSchools.find(
+        (s) =>
+          s.registrationCodeUsed?.toLowerCase() === codeNormalized.toLowerCase() ||
+          s.invitationCode?.toLowerCase() === codeNormalized.toLowerCase() ||
+          s.moeCode?.toLowerCase() === codeNormalized.toLowerCase() ||
+          s.id.toLowerCase() === codeNormalized.toLowerCase()
+      )
+    : null;
 
   const handleRefreshStatus = async () => {
     setRechecking(true);
@@ -414,61 +512,224 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
             </div>
 
             {/* School Search & Selection */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-black text-slate-300">
-                البحث عن المدرسة واختيارها <span className="text-rose-400">*</span>
-              </label>
-              
-              <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute right-3 top-3.5" />
-                <input
-                  type="text"
-                  placeholder="ابحث باسم المدرسة أو مدينتها (مثل: مدرسة الخرج، الرياض...)"
-                  value={schoolSearchQuery}
-                  onChange={(e) => setSchoolSearchQuery(e.target.value)}
-                  className="w-full text-xs py-3 pr-9 pl-4 rounded-xl border border-slate-700 bg-slate-800 text-white font-bold outline-none focus:border-blue-500"
-                />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-black text-slate-300">
+                  البحث عن المدرسة واختيارها <span className="text-rose-400">*</span>
+                </label>
+                <span className="text-[11px] font-bold text-blue-400">
+                  {availableSchools.length} مدرسة معتمدة
+                </span>
               </div>
 
-              {/* Autocomplete School Results */}
-              <div className="max-h-36 overflow-y-auto bg-slate-800/90 rounded-xl border border-slate-700 divide-y divide-slate-700/60 mt-1">
-                {schoolsLoading ? (
-                  <div className="p-3 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>جاري تحميل المدارس المعتمدة...</span>
-                  </div>
-                ) : filteredSchools.length > 0 ? (
-                  filteredSchools.map((sch) => (
-                    <button
-                      key={sch.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedSchoolId(sch.id);
-                        setSelectedSchoolName(sch.name);
-                        setSchoolSearchQuery(sch.name);
-                      }}
-                      className={`w-full text-right p-2.5 text-xs flex items-center justify-between hover:bg-slate-700/80 transition ${
-                        selectedSchoolId === sch.id ? 'bg-blue-600/20 text-blue-300 font-black' : 'text-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                        <span>{sch.name}</span>
-                        {sch.location && (
-                          <span className="text-[10px] text-slate-400">({sch.location})</span>
+              {/* Selected School Highlight Card */}
+              {selectedSchoolId && selectedSchoolName ? (
+                <div className="p-3.5 bg-gradient-to-r from-emerald-950/50 to-slate-900 border-2 border-emerald-500/50 rounded-2xl flex items-center justify-between gap-3 shadow-lg transition animate-in fade-in duration-200">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
+                      <Check className="w-5 h-5 font-black" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-emerald-300 font-black text-sm truncate">
+                          {selectedSchoolName}
+                        </span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold">
+                          تم التحديد ✓
+                        </span>
+                      </div>
+                      <div className="text-slate-400 text-[11px] flex items-center gap-2 mt-0.5 truncate">
+                        {availableSchools.find((s) => s.id === selectedSchoolId)?.location && (
+                          <span>{availableSchools.find((s) => s.id === selectedSchoolId)?.location}</span>
+                        )}
+                        {availableSchools.find((s) => s.id === selectedSchoolId)?.badge && (
+                          <span>• {availableSchools.find((s) => s.id === selectedSchoolId)?.badge}</span>
+                        )}
+                        {availableSchools.find((s) => s.id === selectedSchoolId)?.registrationCodeUsed && (
+                          <span className="font-mono text-[10px] text-slate-400">
+                            (كود: {availableSchools.find((s) => s.id === selectedSchoolId)?.registrationCodeUsed})
+                          </span>
                         )}
                       </div>
-                      {selectedSchoolId === sch.id && (
-                        <Check className="w-4 h-4 text-emerald-400" />
-                      )}
-                    </button>
-                  ))
-                ) : (
-                  <div className="p-3 text-center text-xs text-slate-400">
-                    لا توجد مدارس تطابق بحثك. يرجى التأكد من كتابة الاسم بصورة صحيحة.
+                    </div>
                   </div>
-                )}
-              </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedSchoolId('');
+                      setSelectedSchoolName('');
+                      setSchoolSearchQuery('');
+                    }}
+                    className="shrink-0 text-slate-400 hover:text-rose-400 text-[11px] font-bold border border-slate-700 hover:border-rose-500/50 bg-slate-800/80 px-3 py-1.5 rounded-xl transition shadow-sm"
+                  >
+                    تغيير المدرسة
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-3.5" />
+                    <input
+                      type="text"
+                      placeholder="اكتب اسم المدرسة، الحي، أو رمز المدرسة (مثل: الهياثم، الخرج، SCH-2026...)"
+                      value={schoolSearchQuery}
+                      onChange={(e) => setSchoolSearchQuery(e.target.value)}
+                      className="w-full text-xs py-3 pr-10 pl-4 rounded-xl border border-slate-700 bg-slate-800 text-white font-bold outline-none focus:border-blue-500 transition shadow-inner"
+                    />
+                    {schoolSearchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSchoolSearchQuery('')}
+                        className="absolute left-3 top-3 text-[11px] text-slate-400 hover:text-white bg-slate-700/60 px-2 py-0.5 rounded-md"
+                      >
+                        مسح
+                      </button>
+                    )}
+                  </div>
+
+                  {/* School Search Results List */}
+                  <div className="max-h-56 overflow-y-auto bg-slate-800/95 rounded-xl border border-slate-700 divide-y divide-slate-700/60 shadow-xl">
+                    {schoolsLoading ? (
+                      <div className="p-4 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
+                        <span>جاري مزامنة المدارس المعتمدة...</span>
+                      </div>
+                    ) : filteredSchools.length > 0 ? (
+                      filteredSchools.map((sch) => {
+                        const isSelected = selectedSchoolId === sch.id;
+                        return (
+                          <button
+                            key={sch.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedSchoolId(sch.id);
+                              setSelectedSchoolName(sch.name);
+                              setSchoolSearchQuery(sch.name);
+                            }}
+                            className={`w-full text-right p-3 text-xs flex items-center justify-between hover:bg-blue-600/10 transition group ${
+                              isSelected ? 'bg-blue-600/20 text-blue-300 font-black' : 'text-slate-200'
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className="w-7 h-7 rounded-lg bg-slate-700/70 border border-slate-600/50 text-blue-400 flex items-center justify-center shrink-0 mt-0.5 group-hover:bg-blue-600 group-hover:text-white transition">
+                                <Building2 className="w-3.5 h-3.5" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-black text-xs text-white group-hover:text-blue-300 transition truncate">
+                                  {sch.name}
+                                </div>
+                                <div className="flex items-center gap-2 flex-wrap text-[10px] text-slate-400 mt-1">
+                                  {sch.location && (
+                                    <span className="bg-slate-700/50 px-2 py-0.5 rounded-md text-slate-300">
+                                      {sch.location}
+                                    </span>
+                                  )}
+                                  {sch.badge && (
+                                    <span className="bg-blue-950/60 text-blue-300 border border-blue-800/40 px-2 py-0.5 rounded-md">
+                                      {sch.badge}
+                                    </span>
+                                  )}
+                                  {sch.registrationCodeUsed && (
+                                    <span className="font-mono text-slate-400 bg-slate-900/60 px-1.5 py-0.5 rounded">
+                                      {sch.registrationCodeUsed}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="shrink-0 mr-2">
+                              {isSelected ? (
+                                <span className="flex items-center gap-1 text-[11px] text-emerald-400 font-black bg-emerald-500/20 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>مختارة</span>
+                                </span>
+                              ) : (
+                                <span className="text-[11px] text-blue-400 group-hover:text-white font-bold bg-blue-600/20 group-hover:bg-blue-600 px-3 py-1 rounded-lg transition border border-blue-500/30">
+                                  اختيار
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    ) : (
+                      <div className="p-4 text-center text-xs text-slate-400 space-y-2">
+                        <div>لا توجد مدارس تطابق بحثك الحالي ("{schoolSearchQuery}").</div>
+                        {schoolSearchQuery.trim().length > 1 && (
+                          <div className="pt-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const customId = `sch-custom-${Date.now()}`;
+                                const newCustomSchool: SchoolTenant = {
+                                  id: customId,
+                                  name: schoolSearchQuery.trim(),
+                                  nameEn: schoolSearchQuery.trim(),
+                                  slug: customId,
+                                  logoText: schoolSearchQuery.trim().slice(0, 2),
+                                  badge: 'مدرسة مسجلة',
+                                  primaryColor: 'from-blue-600 to-indigo-600',
+                                  accentColor: 'blue',
+                                  motto: 'التعليم الذكي والجيل الواعد',
+                                  location: 'المملكة العربية السعودية',
+                                  totalStudentsCount: 0,
+                                  totalTeachersCount: 0,
+                                  isApproved: true,
+                                  circulars: []
+                                };
+                                setAvailableSchools((prev) => [newCustomSchool, ...prev]);
+                                setSelectedSchoolId(newCustomSchool.id);
+                                setSelectedSchoolName(newCustomSchool.name);
+                              }}
+                              className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-md transition inline-flex items-center gap-1.5"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                              <span>اعتماد واختيار "{schoolSearchQuery.trim()}" كمدرستي</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Fallback Option if user entered query and wants to register it directly */}
+                  {schoolSearchQuery.trim().length > 2 && filteredSchools.length > 0 && (
+                    <div className="p-2.5 bg-slate-800/60 border border-slate-700/80 rounded-xl flex items-center justify-between gap-2 text-xs">
+                      <span className="text-slate-300 text-[11px]">
+                        لم تجد مدرستك بدقة؟ يمكنك اعتماد الاسم المكتوب فوراً:
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const customId = `sch-custom-${Date.now()}`;
+                          const newCustomSchool: SchoolTenant = {
+                            id: customId,
+                            name: schoolSearchQuery.trim(),
+                            nameEn: schoolSearchQuery.trim(),
+                            slug: customId,
+                            logoText: schoolSearchQuery.trim().slice(0, 2),
+                            badge: 'مدرسة مسجلة',
+                            primaryColor: 'from-blue-600 to-indigo-600',
+                            accentColor: 'blue',
+                            motto: 'التعليم الذكي والجيل الواعد',
+                            location: 'المملكة العربية السعودية',
+                            totalStudentsCount: 0,
+                            totalTeachersCount: 0,
+                            isApproved: true,
+                            circulars: []
+                          };
+                          setAvailableSchools((prev) => [newCustomSchool, ...prev]);
+                          setSelectedSchoolId(newCustomSchool.id);
+                          setSelectedSchoolName(newCustomSchool.name);
+                        }}
+                        className="text-blue-400 hover:text-blue-300 text-[11px] font-bold underline shrink-0"
+                      >
+                        اعتماد "{schoolSearchQuery.trim()}"
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Stage & Grade Selectors */}
@@ -552,15 +813,43 @@ export const UnlinkedUserGate: React.FC<UnlinkedUserGateProps> = ({
             {/* Class / Teacher Code */}
             <div className="space-y-1.5">
               <label className="block text-xs font-black text-slate-300">
-                رمز الفصل أو رمز المعلم (اختياري)
+                رمز الفصل أو رمز المعلم أو رمز المدرسة (اختياري)
               </label>
               <input
                 type="text"
                 value={teacherOrClassCode}
                 onChange={(e) => setTeacherOrClassCode(e.target.value)}
-                placeholder="أدخل رمز الفصل أو رمز المعلم إن وجد للاعتماد المباشر"
+                placeholder="أدخل رمز الفصل، رمز المعلم، أو رمز المدرسة (مثل: SCH-2026...)"
                 className="w-full text-xs py-3 px-3.5 rounded-xl border border-slate-700 bg-slate-800 text-white font-mono outline-none focus:border-blue-500 uppercase tracking-wider"
               />
+
+              {matchedSchoolByCode && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="text-emerald-300 truncate">
+                      الرمز يطابق: <strong>{matchedSchoolByCode.name}</strong>
+                    </span>
+                  </div>
+                  {selectedSchoolId !== matchedSchoolByCode.id ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedSchoolId(matchedSchoolByCode.id);
+                        setSelectedSchoolName(matchedSchoolByCode.name);
+                        setSchoolSearchQuery(matchedSchoolByCode.name);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1 rounded-lg font-bold text-[11px] shrink-0 transition"
+                    >
+                      تحديد هذه المدرسة
+                    </button>
+                  ) : (
+                    <span className="text-emerald-400 font-bold text-[11px] shrink-0">
+                      ✓ محددة حالياً
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Error Message */}

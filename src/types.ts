@@ -235,7 +235,30 @@ export interface SchoolBroadcastMessage {
   receivedCount: number;
 }
 
-export type SchoolInvitationStatus = 'draft' | 'sent' | 'viewed' | 'registered' | 'verified' | 'activated';
+export type SchoolLinkStatus = 'draft' | 'sent' | 'pending' | 'linked' | 'active' | 'suspended';
+
+export type SchoolInvitationStatus = 'draft' | 'sent' | 'pending' | 'linked' | 'active' | 'suspended' | 'viewed' | 'registered' | 'verified' | 'activated';
+
+export interface RealSchoolStats {
+  schoolId: string;
+  realDbId?: string;
+  studentsCount: number;
+  activeStudentsCount: number;
+  teachersCount: number;
+  activeTeachersCount: number;
+  classesCount: number;
+  parentsCount: number;
+  activeUsersCount: number;
+  totalUsersCount: number;
+  activationRate: number;
+  studentActivationRate: number;
+  teacherActivationRate: number;
+  principalName: string | null;
+  principalUserId: string | null;
+  attendanceRate: number | null;
+  lastActivity: string | null;
+  linkStatus: SchoolLinkStatus;
+}
 
 export interface SchoolInvitation {
   id: string;
@@ -1339,4 +1362,76 @@ export interface AchievementRecord {
   createdAt: string;
   updatedAt: string;
 }
+
+// =========================================================================
+// PARENT PORTAL TYPES & INTERFACES
+// =========================================================================
+
+export type ParentRelationship = 'father' | 'mother' | 'guardian';
+export type ParentLinkRequestStatus = 'pending' | 'approved' | 'rejected';
+export type ParentMeetingType = 'in_person' | 'phone' | 'online';
+export type ParentMeetingStatus = 'pending' | 'approved' | 'rejected' | 'completed';
+
+export interface ParentLinkRequest {
+  id: string;
+  parentUserId: string;
+  parentEmail?: string;
+  parentName: string;
+  parentPhone?: string;
+  studentId: string;
+  studentName?: string;
+  studentNumber?: string;
+  schoolId: string;
+  schoolName?: string;
+  gradeName?: string;
+  classroomName?: string;
+  relationship: ParentRelationship;
+  status: ParentLinkRequestStatus;
+  rejectionReason?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  createdAt: string;
+}
+
+export interface LinkedChild {
+  id: string;
+  studentId: string;
+  schoolId: string;
+  schoolName?: string;
+  schoolPhone?: string;
+  fullName: string;
+  studentNumber: string;
+  gradeName: string;
+  classroomName: string;
+  relationship: ParentRelationship;
+  avatar?: string;
+  avatarUrl?: string;
+  email?: string;
+  parentPhone?: string;
+  academicYear?: string;
+  linkedAt: string;
+}
+
+export interface ParentMeetingRequest {
+  id: string;
+  schoolId: string;
+  schoolName?: string;
+  parentUserId: string;
+  parentName: string;
+  parentPhone?: string;
+  studentId: string;
+  studentName: string;
+  teacherId?: string;
+  teacherName?: string;
+  targetRole: 'teacher' | 'counselor' | 'principal' | 'vice_principal';
+  subject: string;
+  meetingType: ParentMeetingType;
+  preferredDate: string;
+  preferredTime?: string;
+  notes?: string;
+  status: ParentMeetingStatus;
+  schoolResponse?: string;
+  createdAt: string;
+}
+
 

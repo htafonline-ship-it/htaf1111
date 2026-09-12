@@ -9,17 +9,23 @@ import {
   SchoolRegistrationCode,
   SchoolInvitation,
   SchoolInvitationStatus,
+  SchoolLinkStatus,
+  RealSchoolStats,
   PlatformLetterSettings
 } from '../types';
 import {
   fetchSupabaseSchoolInvitations,
   saveSupabaseSchoolInvitation,
   updateSupabaseSchoolInvitationStatus,
+  updateSupabaseSchoolLinkStatus,
+  fetchRealSchoolStatsMap,
+  getSchoolPlatformLinkingRlsMigration,
   getSupabasePlatformLetterSettings,
   saveSupabasePlatformLetterSettings,
   DEFAULT_PLATFORM_LETTER_SETTINGS,
   isSupabaseConfigured
 } from '../lib/supabase';
+import { SchoolProfileModal } from './SchoolProfileModal';
 import {
   Building2,
   Send,
@@ -64,6 +70,10 @@ interface KharjSchoolsHubProps {
   existingSchools?: SchoolTenant[];
   onOpenRadar?: () => void;
   onOpenSchoolBarcode?: (school: SchoolTenant) => void;
+  currentUser?: any;
+  currentSchool?: SchoolTenant | null;
+  userRole?: string;
+  userSchoolLink?: any;
 }
 
 export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
@@ -71,7 +81,11 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
   onAddRegistrationCode,
   existingSchools = [],
   onOpenRadar,
-  onOpenSchoolBarcode
+  onOpenSchoolBarcode,
+  currentUser,
+  currentSchool,
+  userRole = 'platform_admin',
+  userSchoolLink
 }) => {
   const [schoolsList, setSchoolsList] = useState<KharjSchool[]>(INITIAL_KHARJ_SCHOOLS);
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
@@ -80,6 +94,12 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoadingDb, setIsLoadingDb] = useState(false);
+
+  // Real Supabase Statistics & Profile Modal
+  const [schoolsStats, setSchoolsStats] = useState<Record<string, RealSchoolStats>>({});
+  const [activeProfileSchool, setActiveProfileSchool] = useState<KharjSchool | null>(null);
+  const [showRlsScriptModal, setShowRlsScriptModal] = useState(false);
+  const [copiedRlsScript, setCopiedRlsScript] = useState(false);
 
   // Modals & Action States
   const [activeLetterSchool, setActiveLetterSchool] = useState<KharjSchool | null>(null);
@@ -122,8 +142,42 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
         setLetterSettings(settings);
         setSettingsForm(settings);
 
-        // Load Remote Invitations
+        // Load Real Statistics Map directly from Supabase tables
         if (isSupabaseConfigured) {
+          const { statsMap, dbSchools } = await fetchRealSchoolStatsMap();
+          if (statsMap && Object.keys(statsMap).length > 0) {
+            setSchoolsStats(statsMap);
+          }
+
+          // Merge dbSchools into schoolsList if found
+          if (dbSchools && dbSchools.length > 0) {
+            setSchoolsList((prev) =>
+              prev.map((s) => {
+                const matchedDb = dbSchools.find(
+                  (dbS: any) =>
+                    dbS.id === s.id ||
+                    (dbS.moe_code && dbS.moe_code === s.moeCode) ||
+                    (dbS.name && (dbS.name === s.name || dbS.name.includes(s.name) || s.name.includes(dbS.name)))
+                );
+                if (matchedDb) {
+                  return {
+                    ...s,
+                    id: matchedDb.id || s.id,
+                    name: matchedDb.name || s.name,
+                    moeCode: matchedDb.moe_code || s.moeCode,
+                    registrationCode: matchedDb.invitation_code || s.registrationCode,
+                    principalName: matchedDb.principal_name || s.principalName,
+                    invitationStatus: matchedDb.status || s.invitationStatus,
+                    gender: (matchedDb.gender || s.gender) as any,
+                    stage: (matchedDb.stage || s.stage) as any
+                  };
+                }
+                return s;
+              })
+            );
+          }
+
+          // Load Remote Invitations
           const dbInvitations = await fetchSupabaseSchoolInvitations();
           if (dbInvitations && dbInvitations.length > 0) {
             setSchoolsList((prev) =>
@@ -181,23 +235,76 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
     }
   };
 
-  // Status mapping and colors
-  const STATUS_CONFIG: Record<SchoolInvitationStatus, { label: string; bg: string; text: string; border: string; icon: any }> = {
+  // Status mapping and colors with the 6 official requested states
+  const STATUS_CONFIG: Record<string, { label: string; bg: string; text: string; border: string; icon: any }> = {
     draft: { label: 'مسودة دعوة', bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-300', icon: Clock },
-    sent: { label: 'تم إرسال الدعوة', bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', icon: Send },
-    viewed: { label: 'تم فتح الدعوة', bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300', icon: Eye },
-    registered: { label: 'بدأ التسجيل', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', icon: PlusCircle },
-    verified: { label: 'تم التحقق الأكاديمي', bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-300', icon: ShieldCheck },
-    activated: { label: 'مفعلة ومرتبطة', bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', icon: CheckCircle2 }
+    sent: { label: 'دعوة مرسلة', bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', icon: Send },
+    pending: { label: 'بانتظار الاعتماد', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', icon: Clock },
+    linked: { label: 'مرتبطة', bg: 'bg-indigo-100', text: 'text-indigo-800', border: 'border-indigo-300', icon: CheckCircle2 },
+    active: { label: 'نشطة ومفعلة', bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', icon: ShieldCheck },
+    activated: { label: 'نشطة ومفعلة', bg: 'bg-emerald-100', text: 'text-emerald-800', border: 'border-emerald-300', icon: ShieldCheck },
+    suspended: { label: 'موقوفة', bg: 'bg-rose-100', text: 'text-rose-800', border: 'border-rose-300', icon: AlertTriangle },
+    // compatibility
+    viewed: { label: 'دعوة مرسلة', bg: 'bg-cyan-100', text: 'text-cyan-800', border: 'border-cyan-300', icon: Send },
+    registered: { label: 'بانتظار الاعتماد', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', icon: Clock },
+    verified: { label: 'بانتظار الاعتماد', bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300', icon: Clock }
   };
 
-  const getNormalizedStatus = (rawStatus: any): SchoolInvitationStatus => {
-    if (rawStatus === 'ready') return 'draft';
-    if (rawStatus === 'linked') return 'activated';
-    if (['draft', 'sent', 'viewed', 'registered', 'verified', 'activated'].includes(rawStatus)) {
-      return rawStatus as SchoolInvitationStatus;
+  const getNormalizedStatus = (rawStatus: any): SchoolLinkStatus => {
+    if (!rawStatus || rawStatus === 'ready') return 'draft';
+    if (rawStatus === 'viewed') return 'sent';
+    if (rawStatus === 'registered' || rawStatus === 'verified') return 'pending';
+    if (rawStatus === 'activated') return 'active';
+    if (['draft', 'sent', 'pending', 'linked', 'active', 'suspended'].includes(rawStatus)) {
+      return rawStatus as SchoolLinkStatus;
     }
     return 'draft';
+  };
+
+  // Helper to fetch real Supabase statistics for a school with zero/no-data fallback
+  const getStatsForSchool = (school: KharjSchool): RealSchoolStats => {
+    const found =
+      schoolsStats[school.id] ||
+      schoolsStats[school.name] ||
+      (school.moeCode && schoolsStats[school.moeCode]) ||
+      (school.registrationCode && schoolsStats[school.registrationCode]) ||
+      ((school as any).slug && schoolsStats[(school as any).slug]);
+
+    if (found) return found;
+
+    return {
+      schoolId: school.id,
+      studentsCount: 0,
+      activeStudentsCount: 0,
+      teachersCount: 0,
+      activeTeachersCount: 0,
+      classesCount: 0,
+      parentsCount: 0,
+      activeUsersCount: 0,
+      totalUsersCount: 0,
+      activationRate: 0,
+      studentActivationRate: 0,
+      teacherActivationRate: 0,
+      principalName: school.principalName || null,
+      principalUserId: null,
+      attendanceRate: null,
+      lastActivity: null,
+      linkStatus: getNormalizedStatus(school.invitationStatus)
+    };
+  };
+
+  // Helper for natural Arabic gender terminology
+  const getSchoolGenderLabels = (school: KharjSchool) => {
+    const isGirls = school.gender === 'بنات' || school.name.includes('بنات');
+    const isBoys = school.gender === 'بنين' || school.name.includes('بنين');
+
+    return {
+      studentLabel: isGirls ? 'طالبة' : isBoys ? 'طالب' : 'طالب/ـة',
+      teacherLabel: isGirls ? 'معلمة' : isBoys ? 'معلم' : 'معلم/ـة',
+      activeStudentLabel: isGirls ? 'طالبة مفعلة' : isBoys ? 'طالب مفعل' : 'طالب/ـة مفعل',
+      activeTeacherLabel: isGirls ? 'معلمة نشطة' : isBoys ? 'معلم نشط' : 'معلم/ـة نشط',
+      principalRoleLabel: isGirls ? 'مديرة المدرسة' : isBoys ? 'مدير المدرسة' : 'مدير/مديرة المدرسة'
+    };
   };
 
   // Send single invitation (Status: sent)
@@ -262,7 +369,7 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
   };
 
   // Direct manual status transition for Super Admin tracking
-  const handleUpdateStatusManually = async (schoolId: string, newStatus: SchoolInvitationStatus) => {
+  const handleUpdateStatusManually = async (schoolId: string, newStatus: SchoolLinkStatus) => {
     const target = schoolsList.find((s) => s.id === schoolId);
     if (!target) return;
 
@@ -280,8 +387,21 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
       )
     );
 
-    await updateSupabaseSchoolInvitationStatus(invCode, newStatus);
-    showToast(`🔄 تم تحديث حالة دعوة مدرسة «${target.name}» إلى «${STATUS_CONFIG[newStatus].label}»`);
+    // Update real stats state immediately
+    setSchoolsStats((prev) => {
+      const existing = prev[schoolId] || prev[target.name] || prev[invCode];
+      if (!existing) return prev;
+      const updatedStat = { ...existing, linkStatus: newStatus };
+      return {
+        ...prev,
+        [schoolId]: updatedStat,
+        [target.name]: updatedStat,
+        [invCode]: updatedStat
+      };
+    });
+
+    await updateSupabaseSchoolLinkStatus(invCode, newStatus);
+    showToast(`🔄 تم تحديث حالة ربط مدرسة «${target.name}» إلى «${STATUS_CONFIG[newStatus]?.label || newStatus}»`);
   };
 
   // Batch dispatch for selected center or all
@@ -448,9 +568,12 @@ export const KharjSchoolsHub: React.FC<KharjSchoolsHubProps> = ({
 
   // Analytics Metrics
   const totalSchools = schoolsList.length;
-  const activatedCount = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === 'activated').length;
+  const activatedCount = schoolsList.filter((s) => {
+    const st = getNormalizedStatus(s.invitationStatus);
+    return st === 'active' || st === 'linked';
+  }).length;
   const sentCount = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === 'sent').length;
-  const viewedCount = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === 'viewed').length;
+  const pendingCount = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === 'pending').length;
   const draftCount = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === 'draft').length;
   const totalStudentsEst = schoolsList.reduce((acc, s) => acc + s.estimatedStudents, 0);
 
@@ -550,6 +673,15 @@ ${letterSettings.founderSubtitle}`;
             )}
 
             <button
+              onClick={() => setShowRlsScriptModal(true)}
+              className="bg-slate-800/80 hover:bg-slate-700 text-cyan-300 font-bold text-xs px-4 py-3 rounded-2xl border border-cyan-500/30 flex items-center gap-2 transition"
+              title="عرض سياسات الأمان RLS المطبقة على قاعدة بيانات Supabase"
+            >
+              <ShieldCheck className="w-4 h-4 text-cyan-400" />
+              <span>سياسات الأمان RLS</span>
+            </button>
+
+            <button
               onClick={() => setIsEditingSettings(true)}
               className="bg-slate-800/80 hover:bg-slate-700 text-emerald-300 font-bold text-xs px-4 py-3 rounded-2xl border border-emerald-500/30 flex items-center gap-2 transition"
               title="تعديل توقيع الخطاب وإعدادات المنصة"
@@ -608,7 +740,7 @@ ${letterSettings.founderSubtitle}`;
         <div className="flex items-center justify-between">
           <span className="text-xs font-black text-slate-800 flex items-center gap-2">
             <Compass className="w-4 h-4 text-emerald-600" />
-            <span>مراحل دورة حياة الدعوة والارتباط المؤسسي:</span>
+            <span>مراحل دورة حياة الدعوة والارتباط المؤسسي (Supabase RLS):</span>
           </span>
           <span className="text-[11px] text-slate-500 font-bold">
             محمية بنظام عزل البيانات السحابي RLS
@@ -616,8 +748,8 @@ ${letterSettings.founderSubtitle}`;
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-xs">
-          {(['draft', 'sent', 'viewed', 'registered', 'verified', 'activated'] as SchoolInvitationStatus[]).map((st, idx) => {
-            const cfg = STATUS_CONFIG[st];
+          {(['draft', 'sent', 'pending', 'linked', 'active', 'suspended'] as SchoolLinkStatus[]).map((st, idx) => {
+            const cfg = STATUS_CONFIG[st] || STATUS_CONFIG.draft;
             const Icon = cfg.icon;
             const count = schoolsList.filter((s) => getNormalizedStatus(s.invitationStatus) === st).length;
             const isSelected = selectedStatus === st;
@@ -753,13 +885,13 @@ ${letterSettings.founderSubtitle}`;
             onChange={(e) => setSelectedStatus(e.target.value)}
             className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 outline-none font-bold text-slate-700"
           >
-            <option value="all">كافة حالات الدعوة</option>
+            <option value="all">كافة حالات الربط</option>
             <option value="draft">مسودة دعوة</option>
-            <option value="sent">تم إرسال الدعوة</option>
-            <option value="viewed">تم فتح الدعوة</option>
-            <option value="registered">بدأ التسجيل</option>
-            <option value="verified">تم التحقق الأكاديمي</option>
-            <option value="activated">مفعلة ومرتبطة</option>
+            <option value="sent">دعوة مرسلة</option>
+            <option value="pending">بانتظار الاعتماد</option>
+            <option value="linked">مرتبطة</option>
+            <option value="active">نشطة ومفعلة</option>
+            <option value="suspended">موقوفة</option>
           </select>
         </div>
       </div>
@@ -768,23 +900,27 @@ ${letterSettings.founderSubtitle}`;
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredSchools.map((sch) => {
           const normStatus = getNormalizedStatus(sch.invitationStatus);
-          const statusCfg = STATUS_CONFIG[normStatus];
+          const statusCfg = STATUS_CONFIG[normStatus] || STATUS_CONFIG.draft;
           const StatusIcon = statusCfg.icon;
           const invCode = getInvitationCode(sch);
           const refNum = getReferenceNumber(sch);
+          const schoolRealStats = getStatsForSchool(sch);
+          const labels = getSchoolGenderLabels(sch);
 
           return (
             <div
               key={sch.id}
               className={`bg-white rounded-3xl p-5 border transition shadow-sm hover:shadow-md space-y-4 flex flex-col justify-between ${
-                normStatus === 'activated'
+                normStatus === 'active'
                   ? 'border-emerald-500 ring-1 ring-emerald-500/30 bg-emerald-50/20'
+                  : normStatus === 'linked'
+                  ? 'border-indigo-400/80 bg-indigo-50/20'
+                  : normStatus === 'pending'
+                  ? 'border-amber-400/80 bg-amber-50/20'
                   : normStatus === 'sent'
                   ? 'border-cyan-400/80 bg-cyan-50/20'
-                  : normStatus === 'viewed'
-                  ? 'border-blue-400/80 bg-blue-50/20'
-                  : normStatus === 'verified'
-                  ? 'border-indigo-400/80 bg-indigo-50/20'
+                  : normStatus === 'suspended'
+                  ? 'border-rose-400/80 bg-rose-50/20'
                   : 'border-slate-200 hover:border-emerald-300'
               }`}
             >
@@ -818,15 +954,39 @@ ${letterSettings.founderSubtitle}`;
                 </div>
               </div>
 
-              {/* School Details Box */}
+              {/* School Details Box with Real Supabase Metrics */}
               <div className="bg-slate-50 rounded-2xl p-3 border border-slate-100 space-y-2 text-xs">
-                <div className="flex items-center justify-between text-slate-600">
-                  <span className="font-bold">الجهة المخاطبة:</span>
-                  <span className="font-extrabold text-slate-800">إدارة مدرسة / {sch.name}</span>
+                {/* الصف المختصر والأنيق المطلوب بدقة من قاعدة Supabase */}
+                <div className="font-black text-slate-800 text-xs sm:text-[13px] tracking-tight flex items-center justify-center gap-1.5 py-1.5 px-2 bg-emerald-50/90 rounded-xl border border-emerald-100 shadow-2xs">
+                  <span>{schoolRealStats.studentsCount} {labels.studentLabel}</span>
+                  <span className="text-emerald-300 font-normal">|</span>
+                  <span>{schoolRealStats.teachersCount} {labels.teacherLabel}</span>
+                  <span className="text-emerald-300 font-normal">|</span>
+                  <span>{schoolRealStats.classesCount} فصل</span>
+                </div>
+
+                {/* صف التفعيل والأرقام النشطة الحقيقية */}
+                <div className="text-[11px] font-bold text-slate-600 flex items-center justify-center gap-1.5 py-1 px-2 bg-white rounded-lg border border-slate-200/60 shadow-2xs">
+                  <span className="text-emerald-800 font-black">التفعيل {schoolRealStats.activationRate}%</span>
+                  <span className="text-slate-300">|</span>
+                  <span>{schoolRealStats.activeStudentsCount} {labels.activeStudentLabel}</span>
+                  <span className="text-slate-300">|</span>
+                  <span>{schoolRealStats.activeTeachersCount} {labels.activeTeacherLabel}</span>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-600 pt-1">
+                  <span className="font-bold">{labels.principalRoleLabel}:</span>
+                  <span className={`font-black ${schoolRealStats.principalName ? 'text-slate-900' : 'text-slate-400 italic'}`}>
+                    {schoolRealStats.principalName || 'لم يتم تعيين مدير/مديرة'}
+                  </span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
-                  <span className="font-bold">الطلاب والكوادر:</span>
-                  <span className="font-medium text-slate-700">~{sch.estimatedStudents} طالب | {sch.estimatedTeachers} معلم</span>
+                  <span className="font-bold">أولياء الأمور المرتبطين:</span>
+                  <span className="font-extrabold text-slate-800">{schoolRealStats.parentsCount} ولي أمر</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span className="font-bold">المستخدمون النشطون:</span>
+                  <span className="font-mono font-black text-emerald-700">{schoolRealStats.activeUsersCount} نشط</span>
                 </div>
                 <div className="flex items-center justify-between text-slate-600">
                   <span className="font-bold">الرقم المرجعي للدعوة:</span>
@@ -852,10 +1012,10 @@ ${letterSettings.founderSubtitle}`;
               {/* Status Stepper / Quick Stage Switcher */}
               <div className="bg-white p-2 rounded-xl border border-slate-200 text-[11px] space-y-1">
                 <div className="flex items-center justify-between text-slate-500 font-bold">
-                  <span>تحديث حالة الدعوة في قاعدة البيانات:</span>
+                  <span>تحديث حالة الربط في قاعدة Supabase:</span>
                 </div>
                 <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                  {(['draft', 'sent', 'viewed', 'registered', 'verified', 'activated'] as SchoolInvitationStatus[]).map((st) => (
+                  {(['draft', 'sent', 'pending', 'linked', 'active', 'suspended'] as SchoolLinkStatus[]).map((st) => (
                     <button
                       key={st}
                       onClick={() => handleUpdateStatusManually(sch.id, st)}
@@ -865,7 +1025,7 @@ ${letterSettings.founderSubtitle}`;
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
-                      {STATUS_CONFIG[st].label.split(' ')[0]}
+                      {STATUS_CONFIG[st]?.label.split(' ')[0] || st}
                     </button>
                   ))}
                 </div>
@@ -873,7 +1033,7 @@ ${letterSettings.founderSubtitle}`;
 
               {/* Card Action Buttons */}
               <div className="space-y-2 pt-2 border-t border-slate-100">
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-4 gap-1.5">
                   <button
                     onClick={() => setActiveLetterSchool(sch)}
                     className="text-[11px] font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 py-2 rounded-xl transition flex items-center justify-center gap-1"
@@ -883,7 +1043,16 @@ ${letterSettings.founderSubtitle}`;
                     <span>الخطاب</span>
                   </button>
 
-                  {onOpenSchoolBarcode && (
+                  <button
+                    onClick={() => setActiveProfileSchool(sch)}
+                    className="text-[11px] font-black text-emerald-800 bg-emerald-50 hover:bg-emerald-100 py-2 rounded-xl transition flex items-center justify-center gap-1 border border-emerald-200 shadow-2xs"
+                    title="ملف المدرسة وبياناتها المباشرة من Supabase"
+                  >
+                    <Building2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                    <span>ملف المدرسة</span>
+                  </button>
+
+                  {onOpenSchoolBarcode ? (
                     <button
                       onClick={() => {
                         const tenantMatch: SchoolTenant = existingSchools.find(
@@ -905,13 +1074,13 @@ ${letterSettings.founderSubtitle}`;
                         };
                         onOpenSchoolBarcode(tenantMatch);
                       }}
-                      className="text-[11px] font-black text-cyan-800 bg-cyan-50 hover:bg-cyan-100 py-2 rounded-xl transition flex items-center justify-center gap-1 border border-cyan-200 shadow-xs"
+                      className="text-[11px] font-black text-cyan-800 bg-cyan-50 hover:bg-cyan-100 py-2 rounded-xl transition flex items-center justify-center gap-1 border border-cyan-200 shadow-2xs"
                       title="عرض وتنزيل باركود المدرسة الذكي"
                     >
                       <QrCode className="w-3.5 h-3.5 text-cyan-600 shrink-0" />
                       <span>الباركود</span>
                     </button>
-                  )}
+                  ) : null}
 
                   <button
                     onClick={() => handleCopy(getInvitationTemplate(sch), sch.id, 'msg')}
@@ -938,13 +1107,13 @@ ${letterSettings.founderSubtitle}`;
                     className={`text-xs font-black py-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm ${
                       normStatus === 'sent'
                         ? 'bg-cyan-600 hover:bg-cyan-700 text-white'
-                        : normStatus === 'activated'
+                        : normStatus === 'active'
                         ? 'bg-slate-200 text-slate-600 hover:bg-slate-300'
                         : 'bg-emerald-600 hover:bg-emerald-700 text-white'
                     }`}
                   >
                     <Send className="w-3.5 h-3.5" />
-                    <span>{normStatus === 'sent' ? 'إعادة إرسال الدعوة' : normStatus === 'activated' ? 'تحديث الدعوة' : 'إرسال دعوة الانضمام'}</span>
+                    <span>{normStatus === 'sent' ? 'إعادة إرسال الدعوة' : normStatus === 'active' ? 'تحديث الدعوة' : 'إرسال دعوة الانضمام'}</span>
                   </button>
 
                   <button
@@ -1247,6 +1416,81 @@ ${letterSettings.founderSubtitle}`;
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* REAL SCHOOL PROFILE & DIRECT SUPABASE STATS MODAL */}
+      {activeProfileSchool && (
+        <SchoolProfileModal
+          school={activeProfileSchool}
+          stats={getStatsForSchool(activeProfileSchool)}
+          onClose={() => setActiveProfileSchool(null)}
+          onUpdateStatus={handleUpdateStatusManually}
+          onSendInvitation={handleSendSingleInvitation}
+          userRole={userRole || currentUser?.role || 'platform_admin'}
+          isPlatformAdmin={['platform_admin', 'super_admin', 'admin'].includes(userRole || currentUser?.role || 'platform_admin')}
+        />
+      )}
+
+      {/* RLS SECURITY SCRIPT MODAL */}
+      {showRlsScriptModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-3xl w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto space-y-5 shadow-2xl border border-cyan-500/40 animate-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-cyan-100 text-cyan-800 flex items-center justify-center font-black">
+                  <ShieldCheck className="w-5 h-5 text-cyan-700" />
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-slate-900">سياسات الأمان وعزل البيانات المؤسسي (RLS)</h3>
+                  <p className="text-xs text-slate-500">حماية الجداول على مستوى قاعدة بيانات Supabase بناءً على معرف المدرسة والوظائف</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowRlsScriptModal(false)}
+                className="text-slate-400 hover:text-slate-700 p-2 rounded-full hover:bg-slate-100 transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 text-slate-200 text-xs font-mono relative">
+              <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
+                <span className="text-emerald-400 font-bold">SQL Migration: Row Level Security (RLS) Policies</span>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(getSchoolPlatformLinkingRlsMigration());
+                    setCopiedRlsScript(true);
+                    setTimeout(() => setCopiedRlsScript(false), 2000);
+                  }}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-sm"
+                >
+                  {copiedRlsScript ? <Check className="w-3.5 h-3.5 text-white" /> : <Copy className="w-3.5 h-3.5 text-white" />}
+                  <span>{copiedRlsScript ? 'تم النسخ!' : 'نسخ كود SQL'}</span>
+                </button>
+              </div>
+
+              <pre className="overflow-x-auto max-h-80 text-[11px] leading-relaxed text-cyan-200 select-all font-mono">
+                {getSchoolPlatformLinkingRlsMigration()}
+              </pre>
+            </div>
+
+            <div className="bg-cyan-50 border border-cyan-200 p-3.5 rounded-2xl text-xs text-cyan-900 leading-relaxed flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-cyan-700 shrink-0 mt-0.5" />
+              <div>
+                <strong>ضمان الأمان المؤسسي:</strong> كافة سياسات RLS تطبق على مستوى قاعدة بيانات Supabase وتضمن عدم تسريب أي سجل (طلاب، معلمين، فصول، طلبات أولياء الأمور) خارج مدرسة منسوبيها.
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setShowRlsScriptModal(false)}
+                className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-black text-xs transition"
+              >
+                إغلاق
+              </button>
+            </div>
           </div>
         </div>
       )}

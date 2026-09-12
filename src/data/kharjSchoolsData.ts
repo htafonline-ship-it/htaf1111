@@ -1,4 +1,10 @@
-import { SchoolInvitationStatus } from '../types';
+import {
+  SchoolInvitationStatus,
+  SchoolTenant,
+  SchoolGender,
+  SchoolEducationType,
+  SchoolStage
+} from '../types.ts';
 
 export interface KharjSchool {
   id: string;
@@ -661,3 +667,62 @@ export const INITIAL_KHARJ_SCHOOLS: KharjSchool[] = [
     invitationStatus: 'ready'
   }
 ];
+
+export function convertKharjSchoolToTenant(school: KharjSchool): SchoolTenant {
+  const genderMap: Record<string, SchoolGender> = {
+    'بنين': 'boys',
+    'بنات': 'girls',
+    'مشترك': 'mixed'
+  };
+
+  const eduTypeMap: Record<string, SchoolEducationType> = {
+    'حكومي': 'حكومي',
+    'أهلي': 'أهلي',
+    'عالمي': 'عالمي',
+    'تحفيظ قرآن': 'تحفيظ قرآن'
+  };
+
+  const stageMap: Record<string, SchoolStage> = {
+    'ابتدائي': 'ابتدائي',
+    'متوسط': 'متوسط',
+    'ثانوي': 'ثانوي',
+    'مجمع مشترك': 'مجمع تعليمي',
+    'تحفيظ قرآن': 'مجمع تعليمي',
+    'أهلي وعالمي': 'مجمع تعليمي'
+  };
+
+  return {
+    id: school.id,
+    name: school.name,
+    nameEn: school.nameEn,
+    slug: `kharj-${school.id}`,
+    logoText: school.name ? school.name.slice(0, 2) : 'مد',
+    badge: `${school.type} - ${school.stage}`,
+    primaryColor: 'from-blue-600 to-indigo-600',
+    accentColor: 'blue',
+    motto: 'التعليم الذكي والجيل الواعد',
+    location: `${school.center} - ${school.district}`,
+    gender: genderMap[school.gender] || 'mixed',
+    educationType: eduTypeMap[school.type] || 'حكومي',
+    stage: stageMap[school.stage] || 'مجمع تعليمي',
+    regionName: 'منطقة الرياض',
+    cityName: 'الخرج',
+    district: school.district,
+    moeCode: school.moeCode,
+    officialEmail: school.contactEmail,
+    phone: school.phone,
+    status: 'active',
+    invitationCode: school.registrationCode || `SCH-${school.id}`,
+    referenceNumber: school.referenceNumber || `INV-${school.id}`,
+    registrationCodeUsed: school.registrationCode,
+    isApproved: true,
+    principalName: school.principalName || 'إدارة المدرسة',
+    principalEmail: school.contactEmail,
+    totalStudentsCount: school.estimatedStudents || 0,
+    totalTeachersCount: school.estimatedTeachers || 0,
+    circulars: []
+  };
+}
+
+export const KHARJ_TENANT_SCHOOLS: SchoolTenant[] = INITIAL_KHARJ_SCHOOLS.map(convertKharjSchoolToTenant);
+

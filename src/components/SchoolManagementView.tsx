@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { SchoolTenant, SchoolCircular, CounselingReferral, ModerationAuditLogItem } from '../types';
+import React, { useState, useEffect } from 'react';
+import { SchoolTenant, SchoolCircular, CounselingReferral, ModerationAuditLogItem, ParentLinkRequest } from '../types';
+import { fetchSchoolParentLinkRequests, reviewParentLinkRequest } from '../lib/supabase';
 import { BulkExcelImportView } from './BulkExcelImportView';
 import { ReportPdfExportModal } from './ReportPdfExportModal';
 import { PrincipalDashboard } from './dashboards/PrincipalDashboard';
@@ -31,7 +32,17 @@ import {
   Radar,
   QrCode,
   Zap,
-  ChevronDown
+  ChevronDown,
+  Users,
+  Check,
+  XCircle,
+  Loader2,
+  Phone,
+  Mail,
+  GraduationCap,
+  X,
+  AlertCircle,
+  Copy
 } from 'lucide-react';
 import { SchoolServicesManager } from './SchoolServicesManager';
 
@@ -72,10 +83,68 @@ export const SchoolManagementView: React.FC<SchoolManagementViewProps> = ({
   allSchools = [],
   onSelectSchool
 }) => {
-  const [activeTab, setActiveTab] = useState<'principal_dashboard' | 'services' | 'circulars' | 'referrals' | 'audit' | 'bulk_excel'>('principal_dashboard');
+  const [activeTab, setActiveTab] = useState<'principal_dashboard' | 'services' | 'circulars' | 'referrals' | 'audit' | 'bulk_excel' | 'parent_requests'>('principal_dashboard');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [confirmSchoolNameInput, setConfirmSchoolNameInput] = useState('');
+
+  // Parent link requests state
+  const [parentRequests, setParentRequests] = useState<ParentLinkRequest[]>([]);
+  const [isLoadingParentRequests, setIsLoadingParentRequests] = useState(false);
+  const [reviewingRequestId, setReviewingRequestId] = useState<string | null>(null);
+  const [reviewMessage, setReviewMessage] = useState<{ success: boolean; text: string } | null>(null);
+  const [parentRequestsFilter, setParentRequestsFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
+  const [parentRequestsSearch, setParentRequestsSearch] = useState('');
+  const [rejectingRequest, setRejectingRequest] = useState<ParentLinkRequest | null>(null);
+  const [rejectionReasonInput, setRejectionReasonInput] = useState('');
+  const [copiedPhoneId, setCopiedPhoneId] = useState<string | null>(null);
+
+  const loadParentRequests = async () => {
+    if (!currentSchool?.id) return;
+    setIsLoadingParentRequests(true);
+    try {
+      const list = await fetchSchoolParentLinkRequests(currentSchool.id);
+      setParentRequests(list);
+    } catch (err) {
+      console.warn('Error fetching school parent link requests:', err);
+    } finally {
+      setIsLoadingParentRequests(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentSchool?.id) {
+      loadParentRequests();
+    }
+  }, [currentSchool?.id]);
+
+  const handleReviewRequest = async (requestId: string, action: 'approve' | 'reject', customReason?: string) => {
+    setReviewingRequestId(requestId);
+    setReviewMessage(null);
+    try {
+      const reviewer = 'إدارة المدرسة';
+      const reason = action === 'reject' ? (customReason || 'عدم تطابق بيانات الطالب أو صلة القرابة') : undefined;
+      const res = await reviewParentLinkRequest(requestId, action, reviewer, reason);
+      setReviewMessage({ success: res.success, text: res.message });
+      if (res.success) {
+        await loadParentRequests();
+        setRejectingRequest(null);
+        setRejectionReasonInput('');
+      }
+    } catch (err: any) {
+      setReviewMessage({ success: false, text: err?.message || 'فشلت معالجة الطلب' });
+    } finally {
+      setReviewingRequestId(null);
+    }
+  };
+
+  const handleCopyPhone = (id: string, phone: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(phone);
+      setCopiedPhoneId(id);
+      setTimeout(() => setCopiedPhoneId(null), 2000);
+    }
+  };
 
   const [importedStudentsNotice, setImportedStudentsNotice] = useState<number | null>(null);
 
@@ -294,6 +363,24 @@ export const SchoolManagementView: React.FC<SchoolManagementViewProps> = ({
             <ShieldAlert className="w-4 h-4" />
             <span>إحالة طلابية</span>
           </button>
+
+          <button
+            onClick={() => setActiveTab('parent_requests')}
+            className={`text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg flex items-center gap-1.5 transition ${
+              activeTab === 'parent_requests'
+                ? 'bg-emerald-600 text-white shadow-emerald-500/20 font-black'
+                : 'bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30'
+            }`}
+            title="مراجعة طلبات ربط أولياء الأمور بالأبناء"
+          >
+            <Users className="w-4 h-4 text-emerald-400" />
+            <span>طلبات أولياء الأمور</span>
+            {parentRequests.filter((r) => r.status === 'pending').length > 0 && (
+              <span className="bg-amber-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black animate-pulse">
+                {parentRequests.filter((r) => r.status === 'pending').length}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -357,6 +444,28 @@ export const SchoolManagementView: React.FC<SchoolManagementViewProps> = ({
         >
           <FileSpreadsheet className="w-4 h-4" />
           <span>استيراد الطلاب بالجملة (Excel)</span>
+        </button>
+
+        <button
+          id="school-mgmt-tab-parent-requests"
+          onClick={() => setActiveTab('parent_requests')}
+          className={`px-5 py-3 text-xs font-extrabold border-b-2 transition flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'parent_requests'
+              ? 'border-emerald-600 text-emerald-700 bg-emerald-50/60 font-black'
+              : 'border-transparent text-slate-500 hover:text-slate-800'
+          }`}
+        >
+          <Users className="w-4 h-4 text-emerald-600" />
+          <span>طلبات ربط أولياء الأمور</span>
+          {parentRequests.filter((r) => r.status === 'pending').length > 0 ? (
+            <span className="bg-amber-500 text-white rounded-full px-2 py-0.5 text-[10px] font-black animate-pulse">
+              {parentRequests.filter((r) => r.status === 'pending').length} معلق
+            </span>
+          ) : (
+            <span className="bg-slate-100 text-slate-600 rounded-full px-2 py-0.5 text-[10px] font-bold">
+              {parentRequests.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -589,7 +698,579 @@ export const SchoolManagementView: React.FC<SchoolManagementViewProps> = ({
         </div>
       )}
 
-      {/* NEW CIRCULAR MODAL */}
+      {/* PARENT LINK REQUESTS TAB */}
+      {activeTab === 'parent_requests' && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-sm border border-slate-200 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100/70 text-emerald-700">
+                  <Users className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-lg">
+                    طلبات ربط أولياء الأمور بالأبناء
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    مراجعة واعتماد طلبات ربط أولياء الأمور الحقيقية (parent_link_requests) وتحديث الحالة مباشرة في Supabase
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadParentRequests}
+                disabled={isLoadingParentRequests}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${isLoadingParentRequests ? 'animate-spin' : ''}`} />
+                <span>تحديث الطلبات</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Feedback banner */}
+          {reviewMessage && (
+            <div
+              className={`p-4 rounded-2xl text-xs font-bold border flex items-center justify-between gap-3 animate-in fade-in duration-200 ${
+                reviewMessage.success
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                  : 'bg-rose-50 border-rose-200 text-rose-900'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {reviewMessage.success ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0" />
+                )}
+                <span>{reviewMessage.text}</span>
+              </div>
+              <button
+                onClick={() => setReviewMessage(null)}
+                className="text-slate-400 hover:text-slate-600 p-1"
+                title="إغلاق التنبيه"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Stats Bar */}
+          {(() => {
+            const pendingCount = parentRequests.filter((r) => r.status === 'pending').length;
+            const approvedCount = parentRequests.filter((r) => r.status === 'approved').length;
+            const rejectedCount = parentRequests.filter((r) => r.status === 'rejected').length;
+            const totalCount = parentRequests.length;
+
+            return (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <button
+                  onClick={() => setParentRequestsFilter('pending')}
+                  className={`p-4 rounded-2xl border text-right transition ${
+                    parentRequestsFilter === 'pending'
+                      ? 'bg-amber-500/15 border-amber-500/60 shadow-sm ring-2 ring-amber-500/30'
+                      : 'bg-amber-50/60 border-amber-200/70 hover:bg-amber-100/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-amber-800">قيد المراجعة والاعتماد</span>
+                    <Clock className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="text-2xl font-black text-amber-950 flex items-center gap-2">
+                    <span>{pendingCount}</span>
+                    {pendingCount > 0 && (
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-200 text-amber-900 animate-pulse">
+                        جديد
+                      </span>
+                    )}
+                  </div>
+                </button>
+
+                <button
+                  onClick={() => setParentRequestsFilter('approved')}
+                  className={`p-4 rounded-2xl border text-right transition ${
+                    parentRequestsFilter === 'approved'
+                      ? 'bg-emerald-500/15 border-emerald-500/60 shadow-sm ring-2 ring-emerald-500/30'
+                      : 'bg-emerald-50/60 border-emerald-200/70 hover:bg-emerald-100/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-emerald-800">تم الاعتماد والربط</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <div className="text-2xl font-black text-emerald-950">{approvedCount}</div>
+                </button>
+
+                <button
+                  onClick={() => setParentRequestsFilter('rejected')}
+                  className={`p-4 rounded-2xl border text-right transition ${
+                    parentRequestsFilter === 'rejected'
+                      ? 'bg-rose-500/15 border-rose-500/60 shadow-sm ring-2 ring-rose-500/30'
+                      : 'bg-rose-50/60 border-rose-200/70 hover:bg-rose-100/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-bold text-rose-800">طلبات مرفوضة</span>
+                    <XCircle className="w-4 h-4 text-rose-600" />
+                  </div>
+                  <div className="text-2xl font-black text-rose-950">{rejectedCount}</div>
+                </button>
+
+                <button
+                  onClick={() => setParentRequestsFilter('all')}
+                  className={`p-4 rounded-2xl border text-right transition ${
+                    parentRequestsFilter === 'all'
+                      ? 'bg-slate-800 text-white border-slate-700 shadow-sm ring-2 ring-slate-400/30'
+                      : 'bg-slate-50 border-slate-200 hover:bg-slate-100/70'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className={`text-[11px] font-bold ${parentRequestsFilter === 'all' ? 'text-slate-200' : 'text-slate-600'}`}>
+                      إجمالي الطلبات
+                    </span>
+                    <Users className={`w-4 h-4 ${parentRequestsFilter === 'all' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  </div>
+                  <div className={`text-2xl font-black ${parentRequestsFilter === 'all' ? 'text-white' : 'text-slate-900'}`}>
+                    {totalCount}
+                  </div>
+                </button>
+              </div>
+            );
+          })()}
+
+          {/* Filter Pills & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2">
+            {/* Status Pills */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-2xl border border-slate-200 text-xs overflow-x-auto">
+              <button
+                onClick={() => setParentRequestsFilter('pending')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                  parentRequestsFilter === 'pending'
+                    ? 'bg-white text-amber-800 shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>قيد المراجعة</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-amber-100 text-amber-800">
+                  {parentRequests.filter((r) => r.status === 'pending').length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setParentRequestsFilter('approved')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                  parentRequestsFilter === 'approved'
+                    ? 'bg-white text-emerald-800 shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>المعتمدة</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-emerald-100 text-emerald-800">
+                  {parentRequests.filter((r) => r.status === 'approved').length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setParentRequestsFilter('rejected')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                  parentRequestsFilter === 'rejected'
+                    ? 'bg-white text-rose-800 shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>المرفوضة</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-rose-100 text-rose-800">
+                  {parentRequests.filter((r) => r.status === 'rejected').length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setParentRequestsFilter('all')}
+                className={`px-3 py-1.5 rounded-xl font-bold transition whitespace-nowrap flex items-center gap-1.5 ${
+                  parentRequestsFilter === 'all'
+                    ? 'bg-white text-slate-900 shadow-sm font-black'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <span>الكل</span>
+                <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-slate-200 text-slate-800">
+                  {parentRequests.length}
+                </span>
+              </button>
+            </div>
+
+            {/* Search Input */}
+            <div className="relative min-w-[240px]">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="بحث باسم ولي الأمر أو الطالب..."
+                value={parentRequestsSearch}
+                onChange={(e) => setParentRequestsSearch(e.target.value)}
+                className="w-full pl-8 pr-9 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+              />
+              {parentRequestsSearch && (
+                <button
+                  onClick={() => setParentRequestsSearch('')}
+                  className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Requests Cards List */}
+          {isLoadingParentRequests ? (
+            <div className="py-16 text-center text-slate-400 text-xs flex flex-col items-center justify-center gap-3">
+              <Loader2 className="w-8 h-8 animate-spin text-emerald-600" />
+              <span className="font-bold">جاري تحميل طلبات أولياء الأمور من Supabase...</span>
+            </div>
+          ) : (() => {
+            const filtered = parentRequests.filter((req) => {
+              if (parentRequestsFilter !== 'all' && req.status !== parentRequestsFilter) {
+                return false;
+              }
+              if (parentRequestsSearch.trim()) {
+                const q = parentRequestsSearch.trim().toLowerCase();
+                const pName = (req.parentName || '').toLowerCase();
+                const sName = (req.studentName || '').toLowerCase();
+                const pPhone = (req.parentPhone || '').toLowerCase();
+                const pEmail = (req.parentEmail || '').toLowerCase();
+                const sNum = (req.studentNumber || '').toLowerCase();
+                return pName.includes(q) || sName.includes(q) || pPhone.includes(q) || pEmail.includes(q) || sNum.includes(q);
+              }
+              return true;
+            });
+
+            if (filtered.length === 0) {
+              return (
+                <div className="py-14 text-center text-slate-400 text-xs border border-dashed border-slate-200 rounded-3xl p-6 space-y-3">
+                  <div className="w-12 h-12 rounded-full bg-slate-100 mx-auto flex items-center justify-center text-slate-400">
+                    <Users className="w-6 h-6" />
+                  </div>
+                  <div className="font-extrabold text-slate-700 text-sm">
+                    {parentRequestsSearch
+                      ? 'لا توجد طلبات مطابقة للبحث'
+                      : parentRequestsFilter === 'pending'
+                      ? 'لا توجد طلبات ربط معلقة حالياً'
+                      : 'لا توجد طلبات مسجلة في هذا القسم'}
+                  </div>
+                  <p className="text-slate-400 max-w-sm mx-auto">
+                    {parentRequestsFilter === 'pending'
+                      ? 'جميع طلبات أولياء الأمور تمت مراجعتها واعتمادها أو رفضها.'
+                      : 'عند قيام ولي أمر بالبحث عن ابنه وإرسال طلب ربط، سيظهر هنا مباشرة.'}
+                  </p>
+                  {parentRequestsSearch && (
+                    <button
+                      onClick={() => setParentRequestsSearch('')}
+                      className="text-emerald-600 hover:text-emerald-700 font-bold underline"
+                    >
+                      إلغاء تصفية البحث
+                    </button>
+                  )}
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-4">
+                {filtered.map((req) => {
+                  const isReviewing = reviewingRequestId === req.id;
+                  const isPending = req.status === 'pending';
+                  const isApproved = req.status === 'approved';
+                  const isRejected = req.status === 'rejected';
+
+                  const relationLabel =
+                    req.relationship === 'mother' ? 'أم' : req.relationship === 'guardian' ? 'ولي أمر معتمد' : 'أب';
+
+                  return (
+                    <div
+                      key={req.id}
+                      className={`p-5 rounded-2xl border transition-all ${
+                        isPending
+                          ? 'bg-gradient-to-r from-amber-50/40 via-white to-white border-amber-300 shadow-sm'
+                          : isApproved
+                          ? 'bg-white border-slate-200 hover:border-emerald-200'
+                          : 'bg-slate-50/70 border-slate-200 opacity-90'
+                      }`}
+                    >
+                      <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+                        {/* Parent & Student Details */}
+                        <div className="space-y-3 flex-1">
+                          {/* Parent info line */}
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            <span className="font-black text-slate-900 text-base">
+                              {req.parentName}
+                            </span>
+                            <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/60">
+                              صلة القرابة: {relationLabel}
+                            </span>
+
+                            {isPending && (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300/80 flex items-center gap-1">
+                                <Clock className="w-3 h-3 text-amber-600 animate-spin" />
+                                <span>بانتظار الاعتماد</span>
+                              </span>
+                            )}
+                            {isApproved && (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300/80 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                <span>معتمد وموثق</span>
+                              </span>
+                            )}
+                            {isRejected && (
+                              <span className="text-[10px] font-black px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-800 border border-rose-300/80 flex items-center gap-1">
+                                <XCircle className="w-3 h-3 text-rose-600" />
+                                <span>مرفوض</span>
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Contact details */}
+                          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
+                            {req.parentPhone && (
+                              <div className="flex items-center gap-1.5 font-mono text-slate-700 bg-slate-100 px-2.5 py-1 rounded-lg">
+                                <Phone className="w-3.5 h-3.5 text-emerald-600" />
+                                <a href={`tel:${req.parentPhone}`} className="hover:text-emerald-700" dir="ltr">
+                                  {req.parentPhone}
+                                </a>
+                                <button
+                                  onClick={() => handleCopyPhone(req.id, req.parentPhone!)}
+                                  className="text-slate-400 hover:text-slate-600 mr-1"
+                                  title="نسخ رقم الجوال"
+                                >
+                                  {copiedPhoneId === req.id ? (
+                                    <Check className="w-3 h-3 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3 h-3" />
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
+                            {req.parentEmail && (
+                              <div className="flex items-center gap-1.5 text-slate-600">
+                                <Mail className="w-3.5 h-3.5 text-slate-400" />
+                                <a href={`mailto:${req.parentEmail}`} className="hover:underline" dir="ltr">
+                                  {req.parentEmail}
+                                </a>
+                              </div>
+                            )}
+
+                            <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
+                              <span>تاريخ الطلب:</span>
+                              <span dir="ltr">{new Date(req.createdAt).toLocaleDateString('ar-SA')}</span>
+                            </div>
+                          </div>
+
+                          {/* Targeted Student Box */}
+                          <div className="bg-slate-100/90 rounded-xl p-3 border border-slate-200/80 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+                            <div className="flex items-center gap-2">
+                              <GraduationCap className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span className="text-slate-500">الطالب المستهدف:</span>
+                              <strong className="text-slate-900 font-black text-sm">
+                                {req.studentName || 'طالب مسجل'}
+                              </strong>
+                            </div>
+
+                            {req.studentNumber && (
+                              <div className="text-slate-600">
+                                <span className="text-slate-400">رقم الطالب / الهوية: </span>
+                                <span className="font-mono font-bold">{req.studentNumber}</span>
+                              </div>
+                            )}
+
+                            {req.gradeName && (
+                              <div className="text-slate-600">
+                                <span className="text-slate-400">الصف: </span>
+                                <span className="font-bold">{req.gradeName}</span>
+                              </div>
+                            )}
+
+                            {req.classroomName && (
+                              <div className="text-slate-600">
+                                <span className="text-slate-400">الفصل: </span>
+                                <span className="font-bold">{req.classroomName}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Review Details / Rejection Reason */}
+                          {req.rejectionReason && (
+                            <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                              <div>
+                                <span className="font-black">سبب الرفض المسجل: </span>
+                                <span>{req.rejectionReason}</span>
+                              </div>
+                            </div>
+                          )}
+
+                          {req.reviewedBy && isApproved && (
+                            <div className="text-[11px] text-emerald-800 flex items-center gap-1.5">
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                              <span>تم التوثيق والاعتماد بواسطة {req.reviewedBy}</span>
+                              {req.reviewedAt && (
+                                <span className="text-slate-400" dir="ltr">
+                                  ({new Date(req.reviewedAt).toLocaleDateString('ar-SA')})
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="shrink-0 flex items-center gap-2 self-end lg:self-center">
+                          {isPending ? (
+                            <>
+                              <button
+                                onClick={() => handleReviewRequest(req.id, 'approve')}
+                                disabled={isReviewing}
+                                className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white text-xs font-black flex items-center gap-2 shadow-md shadow-emerald-600/20 transition disabled:opacity-50"
+                                title="اعتماد الربط وتوثيقه في قاعدة البيانات"
+                              >
+                                {isReviewing ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Check className="w-4 h-4" />
+                                )}
+                                <span>اعتماد وتوثيق الربط</span>
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  setRejectingRequest(req);
+                                  setRejectionReasonInput('');
+                                }}
+                                disabled={isReviewing}
+                                className="px-3.5 py-2 rounded-xl bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-700 border border-rose-200 text-xs font-black flex items-center gap-1.5 transition disabled:opacity-50"
+                                title="رفض الطلب مع تحديد السبب"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                <span>رفض</span>
+                              </button>
+                            </>
+                          ) : isApproved ? (
+                            <div className="text-center">
+                              <span className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-emerald-100/90 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+                                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                                <span>معتمد في Supabase</span>
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="text-center">
+                              <span className="px-3.5 py-1.5 rounded-xl text-xs font-black bg-rose-100/90 text-rose-800 border border-rose-200 flex items-center gap-1.5">
+                                <XCircle className="w-4 h-4 text-rose-600" />
+                                <span>مرفوض</span>
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
+      {/* REJECTION REASON MODAL */}
+      {rejectingRequest && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-slate-900 text-lg flex items-center gap-2">
+                <XCircle className="w-5 h-5 text-rose-600" />
+                <span>رفض طلب ربط ولي الأمر</span>
+              </h3>
+              <button
+                onClick={() => setRejectingRequest(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+              <div>
+                <span className="text-slate-500">ولي الأمر: </span>
+                <strong className="text-slate-900">{rejectingRequest.parentName}</strong>
+              </div>
+              <div>
+                <span className="text-slate-500">الطالب المطلوب ربطه: </span>
+                <strong className="text-slate-900">{rejectingRequest.studentName || 'طالب مسجل'}</strong>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-slate-700 block">
+                حدد سبب الرفض (سيظهر في حساب ولي الأمر):
+              </label>
+
+              {/* Quick preset chips */}
+              <div className="flex flex-wrap gap-2">
+                {[
+                  'عدم تطابق بيانات الطالب مع السجل المدني',
+                  'صلة القرابة غير مثبتة بالسجلات المدرسية',
+                  'رقم الهاتف لا يطابق المسجل في ملف الطالب',
+                  'يرجى مراجعة إدارة المدرسة شخصياً لمطابقة الأوراق'
+                ].map((reason) => (
+                  <button
+                    key={reason}
+                    type="button"
+                    onClick={() => setRejectionReasonInput(reason)}
+                    className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border text-right transition ${
+                      rejectionReasonInput === reason
+                        ? 'bg-rose-100 border-rose-300 text-rose-900 font-black'
+                        : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {reason}
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={rejectionReasonInput}
+                onChange={(e) => setRejectionReasonInput(e.target.value)}
+                placeholder="أو اكتب سبب الرفض بالتفصيل هنا..."
+                rows={3}
+                className="w-full p-3 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-rose-500 bg-slate-50 focus:bg-white transition"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setRejectingRequest(null)}
+                className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition"
+              >
+                إلغاء
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleReviewRequest(rejectingRequest.id, 'reject', rejectionReasonInput)}
+                disabled={reviewingRequestId === rejectingRequest.id}
+                className="px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-rose-600/20 transition disabled:opacity-50"
+              >
+                {reviewingRequestId === rejectingRequest.id ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <XCircle className="w-4 h-4" />
+                )}
+                <span>تأكيد الرفض وتحديث Supabase</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showCircularModal && (
         <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-lg w-full space-y-5 shadow-2xl border border-slate-200">

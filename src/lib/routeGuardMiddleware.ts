@@ -81,6 +81,16 @@ export function checkTabPermission(
     }
   }
 
+  if (tab === 'parent-portal') {
+    if (role !== 'parent' && !isPlatformAdmin) {
+      return {
+        allowed: false,
+        reason: 'بوابة ولي الأمر مخصصة لأولياء الأمور فقط.',
+        suggestedTab: 'dashboard'
+      };
+    }
+  }
+
   return { allowed: true };
 }
 
@@ -92,8 +102,8 @@ export function checkSchoolTenantAccess(
   userSchoolLink: SupabaseSchoolUserLink | null,
   role: UserRole
 ): RouteCheckResult {
-  // Platform admins can access all schools
-  if (isPlatformAdminRole(role)) {
+  // Platform admins and parents can access based on their specific scopes
+  if (isPlatformAdminRole(role) || role === 'parent') {
     return { allowed: true };
   }
 

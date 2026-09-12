@@ -28,7 +28,8 @@ import {
   Award,
   QrCode,
   Info,
-  UserPlus
+  UserPlus,
+  UserCheck
 } from 'lucide-react';
 import { PWAInstallButton } from '../pwa/PWAInstallButton';
 
@@ -282,6 +283,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <ChevronLeft className="w-3.5 h-3.5 opacity-60" />
             </button>
+
+            {/* Parent Portal */}
+            {(currentRole === 'parent' || isPlatformAdmin) && (
+              <button
+                id="sidebar-nav-parent-portal"
+                onClick={() => handleTabClick('parent-portal')}
+                className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-right ${
+                  activeTab === 'parent-portal'
+                    ? 'bg-gradient-to-r from-emerald-500/20 to-teal-600/30 text-emerald-300 border border-emerald-400/50 shadow-md shadow-emerald-500/15 font-black'
+                    : 'text-slate-300 hover:bg-[#0c183a]/70 hover:text-emerald-200'
+                }`}
+              >
+                <div className="flex items-center gap-2.5">
+                  <UserCheck className={`w-4 h-4 shrink-0 ${activeTab === 'parent-portal' ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <span>بوابة ولي الأمر والأبناء</span>
+                </div>
+                <span className="bg-emerald-950 text-emerald-300 text-[10px] font-black px-1.5 py-0.5 rounded border border-emerald-500/40">
+                  متابعة
+                </span>
+              </button>
+            )}
 
             {/* AI Solver */}
             {(isStudent || isTeacher || isSchoolAdminOrPrincipal || isPlatformAdmin) && (
